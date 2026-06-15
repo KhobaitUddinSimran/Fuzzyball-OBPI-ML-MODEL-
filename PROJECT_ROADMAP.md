@@ -2,7 +2,7 @@
 
 A step-by-step technical blueprint for building the Off-Ball Positional Intelligence (OBPI) engine from an empty repository to a published, validated sports analytics system.
 
----
+
 
 ## Data Source & Field Availability Audit
 
