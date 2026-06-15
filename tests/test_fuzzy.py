@@ -7,6 +7,7 @@ from obpi.fuzzy import (
     build_membership_functions,
     fit_fuzzy_engine,
     score_metrics_dataframe,
+    summarize_metric_memberships,
 )
 
 
@@ -29,6 +30,8 @@ def test_membership_functions_are_percentile_calibrated() -> None:
 
     assert membership.percentiles["p20"] == pytest.approx(0.2)
     assert membership.percentiles["p80"] == pytest.approx(0.8)
+    assert membership.low_points == pytest.approx([0.0, 0.0, 0.2, 0.5])
+    assert membership.high_points == pytest.approx([0.5, 0.8, 1.0, 1.0])
     assert membership.low(0.0) == pytest.approx(1.0)
     assert membership.medium(0.5) == pytest.approx(1.0)
     assert membership.high(1.0) == pytest.approx(1.0)
@@ -60,3 +63,15 @@ def test_score_metrics_dataframe_rejects_missing_metrics() -> None:
 
     with pytest.raises(ValueError, match="missing metric columns"):
         score_metrics_dataframe(df)
+
+
+def test_membership_summary_is_json_serializable() -> None:
+    df = pd.DataFrame(
+        [{f"M{i}": value for i in range(1, 10)} for value in np.linspace(0, 1, 11)]
+    )
+    engine = fit_fuzzy_engine(df)
+    summary = summarize_metric_memberships(engine.membership_functions)
+
+    assert set(summary) == {f"M{i}" for i in range(1, 10)}
+    assert summary["M1"]["percentiles"]["p50"] == pytest.approx(0.5)
+    assert summary["M1"]["medium_points"] == pytest.approx([0.2, 0.4, 0.6, 0.8])

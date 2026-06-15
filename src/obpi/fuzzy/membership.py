@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Union
 
@@ -21,6 +21,19 @@ class MembershipFunctions:
     medium: MembershipCallable
     high: MembershipCallable
     percentiles: dict[str, float]
+    low_points: list[float]
+    medium_points: list[float]
+    high_points: list[float]
+
+    def to_dict(self) -> dict[str, dict[str, float] | list[float]]:
+        """Return a JSON-serializable summary for inspection/export."""
+
+        return {
+            "percentiles": self.percentiles,
+            "low_points": self.low_points,
+            "medium_points": self.medium_points,
+            "high_points": self.high_points,
+        }
 
 
 def trapmf(x: float | np.ndarray, points: list[float]) -> float | np.ndarray:
@@ -67,19 +80,23 @@ def build_membership_functions(values: np.ndarray) -> MembershipFunctions:
         "p80": float(p80),
     }
 
+    low_points = [0.0, 0.0, percentiles["p20"], percentiles["p50"]]
+    medium_points = [
+        percentiles["p20"],
+        percentiles["p40"],
+        percentiles["p60"],
+        percentiles["p80"],
+    ]
+    high_points = [percentiles["p50"], percentiles["p80"], 1.0, 1.0]
+
     return MembershipFunctions(
-        low=lambda x: trapmf(x, [0.0, 0.0, percentiles["p20"], percentiles["p50"]]),
-        medium=lambda x: trapmf(
-            x,
-            [
-                percentiles["p20"],
-                percentiles["p40"],
-                percentiles["p60"],
-                percentiles["p80"],
-            ],
-        ),
-        high=lambda x: trapmf(x, [percentiles["p50"], percentiles["p80"], 1.0, 1.0]),
+        low=lambda x: trapmf(x, low_points),
+        medium=lambda x: trapmf(x, medium_points),
+        high=lambda x: trapmf(x, high_points),
         percentiles=percentiles,
+        low_points=low_points,
+        medium_points=medium_points,
+        high_points=high_points,
     )
 
 
@@ -97,4 +114,15 @@ def build_metric_memberships(
     return {
         metric_name: build_membership_functions(metrics_df[metric_name].to_numpy())
         for metric_name in metric_names
+    }
+
+
+def summarize_metric_memberships(
+    memberships: Mapping[str, MembershipFunctions],
+) -> dict[str, dict[str, dict[str, float] | list[float]]]:
+    """Return JSON-serializable membership metadata by metric."""
+
+    return {
+        metric_name: membership.to_dict()
+        for metric_name, membership in memberships.items()
     }

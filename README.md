@@ -96,3 +96,42 @@ rule2 = ctrl.Rule(metric_in['Medium'], score_out['Medium'])
 rule3 = ctrl.Rule(metric_in['High'], score_out['High'])
 
 obpi_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem([rule1, rule2, rule3]))
+```
+
+## 5. Fuzzy Branch Quick Start
+
+This branch includes a runnable starter pipeline for Person 2's fuzzy logic work.
+Given a metrics table with normalized columns `M1` through `M9`, score it with:
+
+```bash
+python -m pip install -e .
+obpi-score data/processed/metrics.csv results/scored_metrics.csv \
+  --membership-report results/membership_report.json
+```
+
+The command fits percentile-calibrated membership functions from the input table,
+adds an `obpi` score column in `[0, 1]`, and prints a JSON summary. CSV and Parquet
+paths are supported. The optional membership report exports the fitted P20, P40,
+P50, P60, and P80 cutoffs plus the Low/Medium/High trapezoid points for every
+metric.
+
+Run the Week 5 synthetic full-table demo with:
+
+```bash
+python scripts/week5_demo_scoring.py
+```
+
+The demo reads `data/sample/synthetic_metrics.csv` and writes:
+
+```text
+results/week5_scored_metrics.csv
+results/week5_membership_report.json
+```
+
+To run the current checks:
+
+```bash
+python -m pytest
+python -m ruff check .
+python -m mypy src
+```
