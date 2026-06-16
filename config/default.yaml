@@ -1,0 +1,43 @@
+# OBPI default configuration
+# Thresholds are derived from literature and population data where noted.
+
+pitch:
+  length: 120.0  # metres
+  width: 80.0   # metres
+
+movement:
+  # Run detection (OBR90, OIRC)
+  v_threshold: 2.5          # m/s — jog threshold; literature uses 4.0 for HSR
+  duration_threshold: 0.4   # seconds
+  max_dt: 1.5               # seconds — velocity inference gate
+
+receiving:
+  # RBTL
+  def_line_x: 60.0          # metres — defensive line for half-space receipts
+
+  # RUP / BRPC
+  proximity_threshold: 2.5  # metres — under pressure radius
+  pressure_radius: 5.0      # metres — BRPC open space radius
+
+  # BRPC cone geometry
+  cone_angle: 45.0          # degrees
+  cone_length: 15.0         # metres
+
+spatial:
+  # SCI / SC
+  box_size: [10.0, 10.0]   # metres — local defender analysis box
+  sc_threshold: 1.5         # metres — minimum adjusted shift for screen
+
+temporal:
+  # LPC
+  min_dt: 1.2              # seconds — minimum pause duration
+  max_vel: 0.5             # m/s — maximum velocity during pause
+
+  # CBI
+  angle_threshold: 30.0      # degrees — run-ball alignment tolerance
+  lane_buffer: 1.5          # metres — passing lane width buffer
+
+xt:
+  n_cols: 12
+  n_rows: 8
+  sigma: 1.0               # Gaussian smoothing σ (grid cells)
