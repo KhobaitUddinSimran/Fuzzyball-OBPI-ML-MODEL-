@@ -1,120 +1,128 @@
-"""Membership functions for the OBPI fuzzy inference layer."""
+"""Data-calibrated fuzzy membership functions."""
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Union
 
 import numpy as np
 import pandas as pd
 
-
-FUZZY_LABELS = ("Low", "Medium", "High")
+MembershipValue = Union[float, np.ndarray]
+MembershipCallable = Callable[[MembershipValue], MembershipValue]
 
 
 @dataclass(frozen=True)
-class MembershipFunction:
-    """Trapezoidal membership function."""
+class MembershipFunctions:
+    """Low/medium/high membership functions for one metric."""
 
-    points: tuple[float, float, float, float]
+    low: MembershipCallable
+    medium: MembershipCallable
+    high: MembershipCallable
+    percentiles: dict[str, float]
+    low_points: list[float]
+    medium_points: list[float]
+    high_points: list[float]
 
-    def __call__(self, values: float | np.ndarray) -> float | np.ndarray:
-        """Return membership degree(s) in [0, 1]."""
-        return trapezoidal_membership(values, self.points)
+    def to_dict(self) -> dict[str, dict[str, float] | list[float]]:
+        """Return a JSON-serializable summary for inspection/export."""
+
+        return {
+            "percentiles": self.percentiles,
+            "low_points": self.low_points,
+            "medium_points": self.medium_points,
+            "high_points": self.high_points,
+        }
 
 
-def trapezoidal_membership(
-    values: float | np.ndarray,
-    points: tuple[float, float, float, float],
-) -> float | np.ndarray:
-    """Evaluate a trapezoidal membership function.
+def trapmf(x: float | np.ndarray, points: list[float]) -> float | np.ndarray:
+    """Evaluate a trapezoidal membership function."""
 
-    The four points represent the left foot, left shoulder, right shoulder,
-    and right foot of the trapezoid.
-    """
     a, b, c, d = points
-    if not a <= b <= c <= d:
-        raise ValueError("trapezoid points must be ordered as a <= b <= c <= d")
+    values = np.asarray(x, dtype=float)
+    result = np.zeros_like(values, dtype=float)
 
-    x = np.asarray(values, dtype=float)
-    membership = np.zeros_like(x, dtype=float)
+    if b > a:
+        rising = (values > a) & (values < b)
+        result[rising] = (values[rising] - a) / (b - a)
+    result[(values >= b) & (values <= c)] = 1.0
+    if d > c:
+        falling = (values > c) & (values < d)
+        result[falling] = (d - values[falling]) / (d - c)
 
-    if a == b:
-        membership = np.where(x <= b, 1.0, membership)
-    else:
-        rising = (a < x) & (x < b)
-        membership = np.where(rising, (x - a) / (b - a), membership)
-
-    plateau = (b <= x) & (x <= c)
-    membership = np.where(plateau, 1.0, membership)
-
-    if c == d:
-        membership = np.where(x >= c, 1.0, membership)
-    else:
-        falling = (c < x) & (x < d)
-        membership = np.where(falling, (d - x) / (d - c), membership)
-
-    membership = np.clip(membership, 0.0, 1.0)
-    if np.isscalar(values):
-        return float(membership)
-    return membership
+    result = np.clip(result, 0.0, 1.0)
+    if np.isscalar(x):
+        return float(result)
+    return result
 
 
-def build_membership_functions(
-    values: np.ndarray | list[float] | None = None,
-) -> dict[str, MembershipFunction]:
-    """Build Low/Medium/High membership functions from metric values.
+def build_membership_functions(values: np.ndarray) -> MembershipFunctions:
+    """Build low/medium/high trapezoids from empirical metric values.
 
-    When no data is supplied, stable normalized defaults are returned so the
-    fuzzy engine can be used before Person 1's processed metrics exist.
+    The roadmap defines Low as ``trapmf(0, 0, P20, P50)``, Medium as
+    ``trapmf(P20, P40, P60, P80)``, and High as ``trapmf(P50, P80, 1, 1)``.
+    Input values are clipped into the normalized metric universe [0, 1].
     """
-    if values is None:
-        p20, p40, p50, p60, p80 = 0.2, 0.4, 0.5, 0.6, 0.8
-    else:
-        arr = np.asarray(values, dtype=float)
-        arr = arr[np.isfinite(arr)]
-        if arr.size == 0:
-            raise ValueError("values must contain at least one finite number")
-        p20, p40, p50, p60, p80 = np.percentile(arr, [20, 40, 50, 60, 80])
 
-    return {
-        "Low": MembershipFunction(_ordered_points((0.0, 0.0, p20, p50))),
-        "Medium": MembershipFunction(_ordered_points((p20, p40, p60, p80))),
-        "High": MembershipFunction(_ordered_points((p50, p80, 1.0, 1.0))),
+    clean_values = np.asarray(values, dtype=float)
+    clean_values = clean_values[np.isfinite(clean_values)]
+    if clean_values.size == 0:
+        raise ValueError("values must contain at least one finite number")
+
+    clipped = np.clip(clean_values, 0.0, 1.0)
+    p20, p40, p50, p60, p80 = np.percentile(clipped, [20, 40, 50, 60, 80])
+    percentiles = {
+        "p20": float(p20),
+        "p40": float(p40),
+        "p50": float(p50),
+        "p60": float(p60),
+        "p80": float(p80),
     }
 
+    low_points = [0.0, 0.0, percentiles["p20"], percentiles["p50"]]
+    medium_points = [
+        percentiles["p20"],
+        percentiles["p40"],
+        percentiles["p60"],
+        percentiles["p80"],
+    ]
+    high_points = [percentiles["p50"], percentiles["p80"], 1.0, 1.0]
 
-def build_metric_memberships(
-    metric_values: Mapping[str, np.ndarray | list[float]] | None = None,
-    metric_names: list[str] | tuple[str, ...] | None = None,
-) -> dict[str, dict[str, MembershipFunction]]:
-    """Build membership functions for each metric."""
-    if metric_values is None:
-        names = metric_names or tuple(f"M{i}" for i in range(1, 10))
-        return {name: build_membership_functions() for name in names}
-
-    return {
-        metric_name: build_membership_functions(values)
-        for metric_name, values in metric_values.items()
-    }
-
-
-def build_metric_memberships_from_dataframe(
-    metrics_df: pd.DataFrame,
-    metric_columns: list[str] | tuple[str, ...] | None = None,
-) -> dict[str, dict[str, MembershipFunction]]:
-    """Build per-metric memberships from DataFrame columns."""
-    columns = tuple(metric_columns or tuple(f"M{i}" for i in range(1, 10)))
-    missing = sorted(set(columns) - set(metrics_df.columns))
-    if missing:
-        raise ValueError(f"missing metric columns: {', '.join(missing)}")
-
-    return build_metric_memberships(
-        {column: metrics_df[column].to_numpy(dtype=float) for column in columns}
+    return MembershipFunctions(
+        low=lambda x: trapmf(x, low_points),
+        medium=lambda x: trapmf(x, medium_points),
+        high=lambda x: trapmf(x, high_points),
+        percentiles=percentiles,
+        low_points=low_points,
+        medium_points=medium_points,
+        high_points=high_points,
     )
 
 
-def _ordered_points(points: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-    """Keep degenerate percentile inputs valid for trapezoids."""
-    ordered = np.maximum.accumulate(np.asarray(points, dtype=float))
-    return tuple(float(np.clip(value, 0.0, 1.0)) for value in ordered)
+def build_metric_memberships(
+    metrics_df: pd.DataFrame,
+    metric_names: list[str],
+) -> dict[str, MembershipFunctions]:
+    """Build membership functions for every OBPI metric column."""
+
+    missing = set(metric_names) - set(metrics_df.columns)
+    if missing:
+        missing_text = ", ".join(sorted(missing))
+        raise ValueError(f"metrics_df is missing metric columns: {missing_text}")
+
+    return {
+        metric_name: build_membership_functions(metrics_df[metric_name].to_numpy())
+        for metric_name in metric_names
+    }
+
+
+def summarize_metric_memberships(
+    memberships: Mapping[str, MembershipFunctions],
+) -> dict[str, dict[str, dict[str, float] | list[float]]]:
+    """Return JSON-serializable membership metadata by metric."""
+
+    return {
+        metric_name: membership.to_dict()
+        for metric_name, membership in memberships.items()
+    }

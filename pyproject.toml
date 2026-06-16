@@ -1,21 +1,37 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "obpi"
 version = "0.1.0"
-description = "Off-Ball Positional Intelligence fuzzy and ML validation model"
+description = "Off-Ball Positional Intelligence fuzzy scoring and ML validation"
+readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "numpy>=1.24.0",
-    "pandas>=2.0.0",
-    "scikit-learn>=1.3.0",
+  "numpy>=1.24.0",
+  "pandas>=2.0.0",
+  "pyarrow>=12.0.0",
+  "scikit-learn>=1.3.0",
 ]
+
+[project.scripts]
+obpi-score = "obpi.pipeline:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
 testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true

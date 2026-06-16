@@ -1,19 +1,20 @@
-"""Fuzzy inference components for OBPI scoring."""
+"""Fuzzy scoring utilities for OBPI."""
 
 from obpi.fuzzy.engine import FuzzyEngine
 from obpi.fuzzy.membership import (
-    MembershipFunction,
+    MembershipFunctions,
     build_membership_functions,
     build_metric_memberships,
-    build_metric_memberships_from_dataframe,
+    summarize_metric_memberships,
 )
-from obpi.fuzzy.scoring import score_dataframe
+from obpi.fuzzy.scoring import fit_fuzzy_engine, score_metrics_dataframe
 
 __all__ = [
     "FuzzyEngine",
-    "MembershipFunction",
+    "MembershipFunctions",
     "build_membership_functions",
     "build_metric_memberships",
-    "build_metric_memberships_from_dataframe",
-    "score_dataframe",
+    "fit_fuzzy_engine",
+    "score_metrics_dataframe",
+    "summarize_metric_memberships",
 ]

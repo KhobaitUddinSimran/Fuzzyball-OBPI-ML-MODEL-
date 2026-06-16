@@ -98,55 +98,56 @@ rule3 = ctrl.Rule(metric_in['High'], score_out['High'])
 obpi_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem([rule1, rule2, rule3]))
 ```
 
----
+## 5. Fuzzy Branch Quick Start
 
-## Current Implementation Status
-
-### Fuzzy engine
-
-The repository now includes a first working fuzzy scoring layer under `src/obpi/fuzzy/`.
-
-Implemented:
-- `MembershipFunction` and trapezoidal `Low` / `Medium` / `High` membership functions.
-- Data-calibrated percentile memberships using P20, P40, P50, P60, and P80.
-- `FuzzyEngine` for M1-M9 inputs with centroid defuzzification and range correction to `[0, 1]`.
-- Uniform metric aggregation today, with a `metric_weights` hook ready for SHAP-derived weights later.
-- DataFrame and CSV scoring helpers.
-- Synthetic development data in `data/sample/sample_metrics.csv`.
-
-Run the sample scorer:
+This branch includes a runnable starter pipeline for Person 2's fuzzy logic work.
+Given a metrics table with normalized columns `M1` through `M9`, score it with:
 
 ```bash
-PYTHONPATH=src python3 -m obpi.fuzzy.score data/sample/sample_metrics.csv results/sample_obpi_scores.csv
+python -m pip install -e .
+obpi-score data/processed/metrics.csv results/scored_metrics.csv \
+  --membership-report results/membership_report.json
 ```
 
-Run tests:
+The command fits percentile-calibrated membership functions from the input table,
+adds an `obpi` score column in `[0, 1]`, and prints a JSON summary. CSV and Parquet
+paths are supported. The optional membership report exports the fitted P20, P40,
+P50, P60, and P80 cutoffs plus the Low/Medium/High trapezoid points for every
+metric.
+
+Run the Week 5 synthetic full-table demo with:
 
 ```bash
-python3 -m unittest discover -s tests
+python scripts/week5_demo_scoring.py
 ```
 
-### When real data becomes necessary
+The demo reads `data/sample/synthetic_metrics.csv` and writes:
 
-Synthetic data is enough for engine development, CLI wiring, and edge-case tests. Real processed metric data becomes necessary at these points:
+```text
+results/week5_scored_metrics.csv
+results/week5_membership_report.json
+```
 
-- Final membership calibration: use real M1-M9 distributions to set P20/P40/P50/P60/P80.
-- Week 5 sanity checks: plot OBPI against minutes and inspect player rankings.
-- Week 6 ML validation: SVM/XGBoost scores are only meaningful on real metric rows.
-- Week 7 SHAP: feature importance from synthetic data should not be interpreted.
-- Week 9 ablation and benchmarking: requires real metric signal and external benchmark data.
-- Week 10 expert correlation: requires expert panel ratings matched to OBPI rows.
+To run the current checks:
 
-### Week 6 validation
+```bash
+python -m pytest
+python -m ruff check .
+python -m mypy src
+```
 
-The validation suite lives in `src/obpi/ml/validation.py`.
+## 6. Week 6 Validation Status
+
+The ML validation suite lives in `src/obpi/ml/validation.py`.
 
 Implemented:
 - `create_labels(obpi_scores)`: top 25% = class 1, bottom 25% = class 0, middle 50% discarded.
-- `train_logistic(X, y)`: standardized logistic-regression baseline.
-- `train_svm(X, y)`: standardized RBF SVM grid search.
-- `train_xgboost(X, y)`: optional wrapper requiring the `xgboost` dependency.
-- `validate(metrics_df)`: report API returning class counts and cross-validation metrics.
+- `prepare_labeled_data(metrics_df)`: validates M1-M9 plus the OBPI score column.
+- `train_logistic(x, y)`: standardized logistic-regression baseline.
+- `train_svm(x, y)`: standardized RBF SVM grid search.
+- `train_xgboost(x, y)`: optional wrapper requiring the `xgboost` dependency.
+- `evaluate_estimator(...)`: accuracy, ROC-AUC, and class-1 recall with stratified CV.
+- `validate(metrics_df)`: report API for later FastAPI integration.
 
 Example:
 
@@ -154,8 +155,10 @@ Example:
 import pandas as pd
 from obpi.ml.validation import validate
 
-metrics_df = pd.read_csv("results/sample_obpi_scores.csv")
-report = validate(metrics_df, include_xgboost=False)
+metrics_df = pd.read_csv("results/week5_scored_metrics.csv")
+report = validate(metrics_df, score_column="obpi", include_xgboost=False)
 ```
 
-`results/cv_results.json` currently uses synthetic sample data and is only a pipeline smoke test.
+Real StatsBomb-derived M1-M9 rows are required before interpreting validation
+accuracy, ROC-AUC, SHAP importance, ablation results, or benchmark/expert
+correlations. Synthetic results are only pipeline smoke tests.
