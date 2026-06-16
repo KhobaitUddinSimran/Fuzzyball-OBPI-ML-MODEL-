@@ -164,3 +164,20 @@ rule3 = ctrl.Rule(metric_in['High'], score_out['High'])
 
 obpi_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem([rule1, rule2, rule3]))
 ```
+
+### Fuzzy aggregation as downstream scoring
+
+The M1-M9 metrics engine remains the source of truth. Fuzzy aggregation is an
+additive downstream step that consumes an existing metrics DataFrame:
+
+```python
+from obpi.pipeline import compute_all_metrics, run_fuzzy_pipeline
+
+metrics_df = compute_all_metrics(match_id=3794686)
+scored_df = run_fuzzy_pipeline(metrics_df)
+```
+
+`run_fuzzy_pipeline()` supports both the pipeline metric schema
+(`M1_SC`, `M2_OIRC`, ..., `M9_CBI`) and normalized Person 2 columns
+(`M1`, `M2`, ..., `M9`). It writes an OBPI score column in `[0, 1]` without
+modifying or replacing the existing metrics pipeline.

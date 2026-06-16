@@ -1,5 +1,7 @@
 """Tests for receiving metrics (M5 RBTL, M6 RUP, M3 BRPC)."""
 
+from __future__ import annotations
+
 import pandas as pd
 import pytest
 

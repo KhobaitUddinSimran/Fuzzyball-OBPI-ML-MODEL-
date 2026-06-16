@@ -1,5 +1,7 @@
 """Velocity inference from discrete event data with Δt gating."""
 
+from __future__ import annotations
+
 from typing import Any
 
 import numpy as np

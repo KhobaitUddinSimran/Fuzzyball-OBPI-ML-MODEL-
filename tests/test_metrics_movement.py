@@ -1,5 +1,7 @@
 """Tests for movement metrics (M4 OBR90 and M2 OIRC)."""
 
+from __future__ import annotations
+
 import pandas as pd
 import pytest
 

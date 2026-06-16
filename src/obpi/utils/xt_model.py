@@ -1,5 +1,7 @@
 """Expected Threat (xT) model — Karun Singh 12×8 grid."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import numpy as np

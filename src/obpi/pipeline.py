@@ -1,5 +1,7 @@
 """Main orchestrator CLI entrypoint for the OBPI pipeline."""
 
+from __future__ import annotations
+
 import argparse
 import logging
 import sys
@@ -36,6 +38,9 @@ _METRIC_COLUMNS = [
     "M8_LPC",
     "M9_CBI",
 ]
+
+_FUZZY_METRIC_COLUMNS = _METRIC_COLUMNS[2:]
+_NORMALIZED_METRIC_COLUMNS = [f"M{i}" for i in range(1, 10)]
 
 
 def _extract_unique_players(events: pd.DataFrame) -> list[int]:
@@ -256,6 +261,44 @@ def run_pipeline(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out_path, index=False)
     return df.drop(columns=["_schema_version"], errors="ignore")
+
+
+def run_fuzzy_pipeline(
+    metrics_df: pd.DataFrame,
+    output_path: str | Path = "data/processed/obpi_scores.parquet",
+    score_column: str = "obpi",
+) -> pd.DataFrame:
+    """Compute OBPI scores from an existing M1-M9 metrics DataFrame.
+
+    This is intentionally additive: the raw M1-M9 metrics pipeline remains in
+    :func:`compute_all_metrics` and :func:`run_pipeline`; fuzzy aggregation is a
+    separate downstream step that consumes their output.
+    """
+    from obpi.fuzzy.scoring import fit_fuzzy_engine, score_metrics_dataframe
+
+    if set(_FUZZY_METRIC_COLUMNS).issubset(metrics_df.columns):
+        metric_names = _FUZZY_METRIC_COLUMNS
+    elif set(_NORMALIZED_METRIC_COLUMNS).issubset(metrics_df.columns):
+        metric_names = _NORMALIZED_METRIC_COLUMNS
+    else:
+        expected = ", ".join(_FUZZY_METRIC_COLUMNS)
+        normalized = ", ".join(_NORMALIZED_METRIC_COLUMNS)
+        raise ValueError(
+            "metrics_df must contain either pipeline metric columns "
+            f"({expected}) or normalized columns ({normalized})"
+        )
+
+    engine = fit_fuzzy_engine(metrics_df, metric_names=metric_names)
+    scored = score_metrics_dataframe(
+        metrics_df,
+        engine=engine,
+        metric_names=metric_names,
+        score_column=score_column,
+    )
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    scored.to_parquet(output, index=False)
+    return scored
 
 
 def _build_parser() -> argparse.ArgumentParser:

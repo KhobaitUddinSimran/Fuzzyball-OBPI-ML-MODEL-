@@ -1,5 +1,7 @@
 """Movement-quality metrics: M4 OBR90 and M2 OIRC."""
 
+from __future__ import annotations
+
 from typing import Any
 
 import numpy as np

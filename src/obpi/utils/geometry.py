@@ -1,5 +1,7 @@
 """Geometric primitives for OBPI metrics: vectors, angles, polygons."""
 
+from __future__ import annotations
+
 import math
 
 import numpy as np

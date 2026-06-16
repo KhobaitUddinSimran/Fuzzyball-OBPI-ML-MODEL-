@@ -1,5 +1,7 @@
 """Preprocessing utilities: ConvexHull clipping and Δt gating."""
 
+from __future__ import annotations
+
 from typing import Any
 
 import numpy as np

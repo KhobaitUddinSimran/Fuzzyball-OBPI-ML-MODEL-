@@ -1,5 +1,7 @@
 """Temporal metrics: M8 LPC and M9 CBI."""
 
+from __future__ import annotations
+
 from typing import Any
 
 import numpy as np

@@ -1,5 +1,7 @@
 """Spatial metrics: M7 SCI and M1 SC."""
 
+from __future__ import annotations
+
 from typing import Any
 
 import numpy as np
@@ -45,7 +47,7 @@ def compute_sci(
         return 0.0
 
     gains: list[float] = []
-    for before, after in zip(frames_before, frames_after, strict=False):
+    for before, after in zip(frames_before, frames_after):  # noqa: B905
         team_before = _get_team_locations(before, teammate=True)
         team_after = _get_team_locations(after, teammate=True)
 
@@ -105,7 +107,7 @@ def compute_sc(
         return points[mask]
 
     screens: list[float] = []
-    for before, after in zip(frames_before, frames_after, strict=False):
+    for before, after in zip(frames_before, frames_after):  # noqa: B905
         opp_before = _get_team_locations(before, teammate=False)
         opp_after = _get_team_locations(after, teammate=False)
 

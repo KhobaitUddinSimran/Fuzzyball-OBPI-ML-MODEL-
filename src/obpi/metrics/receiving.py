@@ -1,5 +1,7 @@
 """Receiving-quality metrics: M5 RBTL, M6 RUP, and M3 BRPC."""
 
+from __future__ import annotations
+
 from typing import Any
 
 import pandas as pd

@@ -10,6 +10,7 @@ import pytest
 from obpi.pipeline import (
     _extract_unique_players,
     compute_all_metrics,
+    run_fuzzy_pipeline,
     run_pipeline,
 )
 from obpi.utils.xt_model import XTModel
@@ -244,3 +245,26 @@ class TestRunPipeline:
         df = run_pipeline(match_id=999999, output_dir=str(output_dir))
         assert len(df) == 1
         assert df.iloc[0]["M1_SC"] == pytest.approx(0.5)
+
+
+class TestRunFuzzyPipeline:
+    """Tests for fuzzy aggregation as an additive downstream step."""
+
+    @patch("obpi.pipeline.StatsBombLoader")
+    def test_scores_existing_pipeline_metrics(
+        self, mock_loader_cls: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_loader = MagicMock()
+        mock_loader.get_events.return_value = _make_synthetic_events()
+        mock_loader.get_freeze_frames.return_value = _make_synthetic_frames()
+        mock_loader_cls.return_value = mock_loader
+
+        metrics_df = compute_all_metrics(match_id=999999, xt_model=XTModel())
+        output_path = tmp_path / "obpi_scores.parquet"
+
+        scored = run_fuzzy_pipeline(metrics_df, output_path=output_path)
+
+        assert output_path.exists()
+        assert "obpi" in scored.columns
+        assert scored["obpi"].between(0.0, 1.0).all()
+        assert "M1_SC" in scored.columns
