@@ -1,0 +1,43 @@
+{
+  "n_rows": 20,
+  "n_labeled_rows": 10,
+  "class_counts": {
+    "0": 5,
+    "1": 5
+  },
+  "models": {
+    "logistic": {
+      "model_name": "logistic",
+      "accuracy_mean": 0.9,
+      "accuracy_std": 0.09999999999999998,
+      "roc_auc_mean": 1.0,
+      "roc_auc_std": 0.0,
+      "recall_class_1_mean": 1.0,
+      "recall_class_1_std": 0.0,
+      "n_samples": 10,
+      "n_splits": 2,
+      "best_params": {
+        "model__C": 0.1
+      }
+    },
+    "svm": {
+      "model_name": "svm",
+      "accuracy_mean": 0.4,
+      "accuracy_std": 0.0,
+      "roc_auc_mean": 1.0,
+      "roc_auc_std": 0.0,
+      "recall_class_1_mean": 0.5,
+      "recall_class_1_std": 0.5,
+      "n_samples": 10,
+      "n_splits": 2,
+      "best_params": {
+        "model__C": 0.1,
+        "model__gamma": "scale"
+      }
+    }
+  },
+  "notes": [
+    "xgboost is required for train_xgboost(); install xgboost to run Week 6 XGBoost validation"
+  ],
+  "data_warning": "Synthetic sample only. Do not interpret model scores as real OBPI validation."
+}

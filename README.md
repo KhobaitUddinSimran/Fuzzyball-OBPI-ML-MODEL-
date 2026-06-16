@@ -96,3 +96,66 @@ rule2 = ctrl.Rule(metric_in['Medium'], score_out['Medium'])
 rule3 = ctrl.Rule(metric_in['High'], score_out['High'])
 
 obpi_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem([rule1, rule2, rule3]))
+```
+
+---
+
+## Current Implementation Status
+
+### Fuzzy engine
+
+The repository now includes a first working fuzzy scoring layer under `src/obpi/fuzzy/`.
+
+Implemented:
+- `MembershipFunction` and trapezoidal `Low` / `Medium` / `High` membership functions.
+- Data-calibrated percentile memberships using P20, P40, P50, P60, and P80.
+- `FuzzyEngine` for M1-M9 inputs with centroid defuzzification and range correction to `[0, 1]`.
+- Uniform metric aggregation today, with a `metric_weights` hook ready for SHAP-derived weights later.
+- DataFrame and CSV scoring helpers.
+- Synthetic development data in `data/sample/sample_metrics.csv`.
+
+Run the sample scorer:
+
+```bash
+PYTHONPATH=src python3 -m obpi.fuzzy.score data/sample/sample_metrics.csv results/sample_obpi_scores.csv
+```
+
+Run tests:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+### When real data becomes necessary
+
+Synthetic data is enough for engine development, CLI wiring, and edge-case tests. Real processed metric data becomes necessary at these points:
+
+- Final membership calibration: use real M1-M9 distributions to set P20/P40/P50/P60/P80.
+- Week 5 sanity checks: plot OBPI against minutes and inspect player rankings.
+- Week 6 ML validation: SVM/XGBoost scores are only meaningful on real metric rows.
+- Week 7 SHAP: feature importance from synthetic data should not be interpreted.
+- Week 9 ablation and benchmarking: requires real metric signal and external benchmark data.
+- Week 10 expert correlation: requires expert panel ratings matched to OBPI rows.
+
+### Week 6 validation
+
+The validation suite lives in `src/obpi/ml/validation.py`.
+
+Implemented:
+- `create_labels(obpi_scores)`: top 25% = class 1, bottom 25% = class 0, middle 50% discarded.
+- `train_logistic(X, y)`: standardized logistic-regression baseline.
+- `train_svm(X, y)`: standardized RBF SVM grid search.
+- `train_xgboost(X, y)`: optional wrapper requiring the `xgboost` dependency.
+- `validate(metrics_df)`: report API returning class counts and cross-validation metrics.
+
+Example:
+
+```python
+import pandas as pd
+from obpi.ml.validation import validate
+
+metrics_df = pd.read_csv("results/sample_obpi_scores.csv")
+report = validate(metrics_df, include_xgboost=False)
+```
+
+`results/cv_results.json` currently uses synthetic sample data and is only a pipeline smoke test.
