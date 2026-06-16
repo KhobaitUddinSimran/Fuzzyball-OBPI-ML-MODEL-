@@ -16,9 +16,9 @@ from obpi.metrics.movement import _exclude_set_pieces, compute_obr90, compute_oi
 from obpi.metrics.receiving import compute_brpc, compute_rup, get_receipt_events
 from obpi.metrics.spatial import compute_sc, compute_sci
 from obpi.metrics.temporal import _get_player_id, _is_pass, _is_receipt, compute_cbi, compute_lpc
-from obpi.pipeline import _sc_from_frames, _sci_from_frames, main, run_pipeline
+from obpi.pipeline import _sc_from_frames, _sci_from_frames, run_pipeline
 from obpi.utils.geometry import run_directness, to_goal_vector, voronoi_areas
-from obpi.utils.kinematics import detect_runs, infer_velocity
+from obpi.utils.kinematics import detect_runs
 from obpi.utils.logger import setup_logging
 from obpi.utils.units import meters_per_second_to_kmh as mps_to_kmh
 from obpi.utils.xt_model import XTModel

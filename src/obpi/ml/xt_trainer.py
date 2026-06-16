@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from numpy.typing import NDArray
 import pandas as pd
+from numpy.typing import NDArray
 from scipy.ndimage import gaussian_filter
 from sklearn.linear_model import LogisticRegression
 
@@ -124,11 +124,11 @@ def train_xt_grid(
     )
 
     feature_cols = ["dist", "angle"]
-    X = shots[feature_cols].values
+    x_mat = shots[feature_cols].values
     y = shots["goal"].values
 
     model = LogisticRegression(max_iter=1000, class_weight="balanced")
-    model.fit(X, y)
+    model.fit(x_mat, y)
 
     centres = _zone_centres(n_cols=n_cols, n_rows=n_rows)
     centre_df = pd.DataFrame(centres, columns=["x", "y"])
@@ -147,10 +147,7 @@ def train_xt_grid(
     # Clip to non-negative and scale so max = 1.0 (relative threat)
     grid = np.clip(grid, 0.0, None)
     grid_max = float(grid.max())
-    if grid_max > 0:
-        grid = grid / grid_max
-    else:
-        grid = np.zeros_like(grid)
+    grid = grid / grid_max if grid_max > 0 else np.zeros_like(grid)
 
     logger.info(
         "Trained xT grid %dx%d — mean=%.4f, max=%.4f, min=%.4f",

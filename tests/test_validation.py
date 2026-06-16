@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from obpi.validation.checks import METRIC_COLUMNS, REQUIRED_COLUMNS, validate
+from obpi.validation.checks import METRIC_COLUMNS, validate
 
 
 class TestValidate:

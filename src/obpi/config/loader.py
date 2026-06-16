@@ -12,6 +12,7 @@ class Config(dict):
     """Nested dict accessible via dot notation (``cfg.movement.v_threshold``)."""
 
     def __init__(self, mapping: dict[str, Any] | None = None) -> None:
+        """Initialise with an optional nested dict."""
         super().__init__()
         if mapping:
             for key, value in mapping.items():
@@ -21,12 +22,14 @@ class Config(dict):
                     self[key] = value
 
     def __getattr__(self, item: str) -> Any:
+        """Fall back to dict key lookup."""
         try:
             return self[item]
         except KeyError as exc:
             raise AttributeError(item) from exc
 
     def __setattr__(self, key: str, value: Any) -> None:
+        """Store as dict key."""
         self[key] = value
 
 

@@ -19,6 +19,7 @@ class TrackingAdapter:
     """
 
     def __init__(self, match_id: int, data_dir: str = "data/raw/tracking") -> None:
+        """Initialise adapter for *match_id*."""
         self.match_id = match_id
         self.data_dir = data_dir
 
@@ -38,8 +39,8 @@ class TrackingAdapter:
         Returns:
             DataFrame with columns ``[timestamp, x, y, vx, vy, speed]``.
         """
-        frames = self.load_frames()
-        # Placeholder: would compute finite-difference velocities here
+        _ = self.load_frames()  # placeholder
+        # Would compute finite-difference velocities here
         return pd.DataFrame(columns=["timestamp", "x", "y", "vx", "vy", "speed"])
 
     def to_events(self) -> list[dict[str, Any]]:

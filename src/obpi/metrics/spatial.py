@@ -45,7 +45,7 @@ def compute_sci(
         return 0.0
 
     gains: list[float] = []
-    for before, after in zip(frames_before, frames_after):
+    for before, after in zip(frames_before, frames_after, strict=False):
         team_before = _get_team_locations(before, teammate=True)
         team_after = _get_team_locations(after, teammate=True)
 
@@ -105,7 +105,7 @@ def compute_sc(
         return points[mask]
 
     screens: list[float] = []
-    for before, after in zip(frames_before, frames_after):
+    for before, after in zip(frames_before, frames_after, strict=False):
         opp_before = _get_team_locations(before, teammate=False)
         opp_after = _get_team_locations(after, teammate=False)
 
