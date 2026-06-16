@@ -162,3 +162,56 @@ report = validate(metrics_df, score_column="obpi", include_xgboost=False)
 Real StatsBomb-derived M1-M9 rows are required before interpreting validation
 accuracy, ROC-AUC, SHAP importance, ablation results, or benchmark/expert
 correlations. Synthetic results are only pipeline smoke tests.
+
+## 7. Week 7 Explainability Status
+
+The explainability helpers live in `src/obpi/ml/explainability.py`.
+
+Implemented:
+- `compute_shap(model, x)`: lazy SHAP TreeExplainer wrapper for the future XGBoost model.
+- `get_metric_weights(importances)`: normalizes SHAP/permutation importances into weights that sum to 1.0.
+- `compute_permutation_importance(model, x, y)`: scikit-learn permutation sanity check.
+- `save_metric_weights(weights, output_path)`: writes dashboard/API-ready JSON weights.
+
+Synthetic smoke-test artifacts:
+
+```text
+results/permutation_importance.csv
+results/metric_weights.json
+results/VALIDATION_REPORT.md
+```
+
+These artifacts prove the Week 7 plumbing works, but they are not tactical
+findings. Final Week 7 interpretation requires real M1-M9 rows and the trained
+XGBoost model.
+
+## 8. Week 8 API, Ablation, and Correlation Prep
+
+Week 8 support code now includes:
+- `obpi.ml.validate(metrics_df)`: report API for FastAPI/dashboard integration.
+- `obpi.ml.run_ablation(metrics_df)`: leave-one-metric-out validation study.
+- `obpi.ml.spearman_correlation(obpi_scores, comparison_scores)`: proxy/expert correlation helper.
+- `obpi.ml.cronbach_alpha(expert_ratings_df)`: inter-rater reliability helper.
+
+These can run on synthetic data today, but real use requires a processed metrics
+table with `player_id`, `match_id`, `minutes`, `M1`-`M9`, and `obpi`.
+
+## 9. Week 9 Ablation and Benchmarking Prep
+
+Week 9 support code now includes:
+- `obpi.ml.compare_benchmarks(obpi_scores, benchmarks)`.
+- `obpi.ml.orthogonal_variance_test(scores_df)` for PCA variance checks.
+- Markdown/CSV ablation reporting.
+
+Synthetic smoke-test artifacts:
+
+```text
+results/ablation_results.csv
+results/ABLATION_BENCHMARK.md
+results/benchmark_correlations.csv
+results/pca_benchmark.json
+```
+
+Final Week 9 conclusions require real OBPI rows plus external benchmark columns
+for the same players, such as xThreat-style scores or expert/market benchmark
+ratings.

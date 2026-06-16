@@ -1,0 +1,10 @@
+removed_metric,remaining_metrics,full_accuracy,ablated_accuracy,delta_accuracy,redundancy_flag
+M1,8,1.0,1.0,0.0,True
+M2,8,1.0,1.0,0.0,True
+M3,8,1.0,1.0,0.0,True
+M4,8,1.0,1.0,0.0,True
+M5,8,1.0,1.0,0.0,True
+M6,8,1.0,1.0,0.0,True
+M7,8,1.0,1.0,0.0,True
+M8,8,1.0,1.0,0.0,True
+M9,8,1.0,1.0,0.0,True
