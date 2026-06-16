@@ -28,6 +28,8 @@ _METRIC_COLUMNS = [
     "match_id",
     "minutes",
     "starting_position_name",
+    "has_360_data",
+    "freeze_frame_count",
     "M1_SC",
     "M2_OIRC",
     "M3_BRPC",
@@ -92,15 +94,29 @@ class InterimMetricsProcessor:
         self.config = config or load_config()
         self.xt_model = xt_model or XTModel()
 
-    def process_matches(self, match_ids: Iterable[int] | None = None) -> pd.DataFrame:
+    def process_matches(
+        self,
+        match_ids: Iterable[int] | None = None,
+        require_360: bool = False,
+    ) -> pd.DataFrame:
         """Compute player-match metrics and persist them to parquet."""
         player_matches = pd.read_parquet(self.interim_dir / "player_matches.parquet")
         manifest = pd.read_parquet(self.interim_dir / "events_manifest.parquet")
 
         if match_ids is None:
-            target_match_ids = manifest["match_id"].astype(int).tolist()
+            target_manifest = manifest.copy()
+            if require_360 and "freeze_frame_event_count" in target_manifest.columns:
+                target_manifest = target_manifest[target_manifest["freeze_frame_event_count"] > 0]
+            target_match_ids = target_manifest["match_id"].astype(int).tolist()
         else:
             target_match_ids = [int(match_id) for match_id in match_ids]
+            if require_360 and "freeze_frame_event_count" in manifest.columns:
+                frame_counts = manifest.set_index("match_id")["freeze_frame_event_count"]
+                target_match_ids = [
+                    match_id
+                    for match_id in target_match_ids
+                    if int(frame_counts.get(match_id, 0)) > 0
+                ]
 
         rows: list[dict[str, Any]] = []
         for match_id in target_match_ids:
@@ -133,6 +149,8 @@ class InterimMetricsProcessor:
                         "match_id": match_id,
                         "minutes": minutes or 0.0,
                         "starting_position_name": player_row.get("starting_position_name"),
+                        "has_360_data": bool(frames),
+                        "freeze_frame_count": len(frames),
                         "M1_SC": (
                             compute_sc(frames[:-1], frames[1:], avg_loc)
                             if len(frames) >= 2 and avg_loc is not None
@@ -185,6 +203,8 @@ class InterimMetricsProcessor:
                 )
 
         metrics = pd.DataFrame(rows, columns=_METRIC_COLUMNS)
+        if not metrics.empty:
+            metrics["has_360_data"] = metrics["has_360_data"].astype(bool)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         metrics.to_parquet(self.output_dir / "player_match_metrics.parquet", index=False)
         return metrics
@@ -203,6 +223,8 @@ class InterimMetricsProcessor:
                 "team_name": "first",
                 "minutes": "sum",
                 "starting_position_name": "first",
+                "has_360_data": "max",
+                "freeze_frame_count": "sum",
                 "match_id": "count",
             }
         )

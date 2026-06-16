@@ -99,6 +99,7 @@ data/raw/statsbomb_open_data/
   matches/
   events/
   lineups/
+  three-sixty/
 ```
 
 Use `--output-dir` if you want to place the dataset somewhere else.
@@ -121,6 +122,16 @@ data/interim/
   player_matches.parquet
   events_manifest.parquet
   events_by_match/
+```
+
+If `data/raw/statsbomb_open_data/three-sixty/` is present, the preprocessor
+automatically merges standalone StatsBomb 360 frames into the per-match event
+parquet files and records coverage in `events_manifest.parquet`.
+
+To compute metrics only for matches with 360 coverage:
+
+```bash
+python3 scripts/process_interim_metrics.py --require-360
 ```
 
 ### Running the pipeline

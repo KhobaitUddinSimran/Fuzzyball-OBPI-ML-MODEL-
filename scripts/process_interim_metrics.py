@@ -35,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional limit on the number of matches to process.",
     )
+    parser.add_argument(
+        "--require-360",
+        action="store_true",
+        help="Only process matches that have standalone or merged 360 freeze-frame data.",
+    )
     return parser
 
 
@@ -55,10 +60,16 @@ def main() -> int:
         manifest = pd.read_parquet(args.interim_dir / "events_manifest.parquet")
         match_ids = manifest["match_id"].astype(int).head(args.limit_matches).tolist()
 
-    match_metrics = processor.process_matches(match_ids=match_ids)
+    match_metrics = processor.process_matches(
+        match_ids=match_ids,
+        require_360=args.require_360,
+    )
     aggregate_metrics = processor.aggregate_player_metrics(match_metrics)
     print(f"player_match_metrics: {len(match_metrics)} rows")
     print(f"player_aggregate_metrics: {len(aggregate_metrics)} rows")
+    if not match_metrics.empty and "has_360_data" in match_metrics.columns:
+        enriched_rows = int(match_metrics["has_360_data"].sum())
+        print(f"player_match_metrics_with_360: {enriched_rows}")
     return 0
 
 

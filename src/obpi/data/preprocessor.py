@@ -332,9 +332,19 @@ class StatsBombOpenDataPreprocessor:
         for path in sorted((self.raw_dir / "events").glob("*.json")):
             match_id = int(path.stem)
             events = json.loads(path.read_text(encoding="utf-8"))
-            flattened = [self._flatten_event(match_id, event) for event in events]
+            frames_by_event_id = self._load_three_sixty_map(match_id)
+            flattened = [
+                self._flatten_event(match_id, event, frames_by_event_id.get(str(event.get("id"))))
+                for event in events
+            ]
             df = pd.DataFrame(flattened).sort_values("index")
             df.to_parquet(events_output_dir / f"{match_id}.parquet", index=False)
+            freeze_frame_count = (
+                int(df["freeze_frame_json"].notna().sum()) if "freeze_frame_json" in df else 0
+            )
+            visible_area_count = (
+                int(df["visible_area_json"].notna().sum()) if "visible_area_json" in df else 0
+            )
 
             manifest_rows.append(
                 {
@@ -346,7 +356,13 @@ class StatsBombOpenDataPreprocessor:
                     "team_count": int(df["team_id"].dropna().nunique())
                     if not df.empty
                     else 0,
+                    "has_three_sixty_file": bool(frames_by_event_id),
+                    "freeze_frame_event_count": freeze_frame_count,
+                    "visible_area_event_count": visible_area_count,
                     "source_file": str(path.relative_to(self.raw_dir)),
+                    "three_sixty_file": (
+                        f"three-sixty/{match_id}.json" if frames_by_event_id else None
+                    ),
                     "output_file": str(
                         (events_output_dir / f"{match_id}.parquet").relative_to(
                             self.output_dir
@@ -360,8 +376,19 @@ class StatsBombOpenDataPreprocessor:
         manifest.to_parquet(manifest_output, index=False)
         return manifest.reset_index(drop=True)
 
-    def _flatten_event(self, match_id: int, event: dict[str, Any]) -> dict[str, Any]:
+    def _flatten_event(
+        self,
+        match_id: int,
+        event: dict[str, Any],
+        frame_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Flatten one StatsBomb event payload into scalar columns."""
+        freeze_frame = event.get("freeze_frame")
+        visible_area = event.get("visible_area")
+        if frame_payload:
+            freeze_frame = frame_payload.get("freeze_frame", freeze_frame)
+            visible_area = frame_payload.get("visible_area", visible_area)
+
         row: dict[str, Any] = {
             "match_id": match_id,
             "event_id": event.get("id"),
@@ -377,8 +404,10 @@ class StatsBombOpenDataPreprocessor:
             "off_camera": event.get("off_camera"),
             "out": event.get("out"),
             "related_events_json": _json_string(event.get("related_events")),
-            "freeze_frame_json": _json_string(event.get("freeze_frame")),
-            "visible_area_json": _json_string(event.get("visible_area")),
+            "freeze_frame_json": _json_string(freeze_frame),
+            "visible_area_json": _json_string(visible_area),
+            "has_freeze_frame": freeze_frame not in (None, [], {}),
+            "has_visible_area": visible_area not in (None, [], {}),
             "tactics_formation": (
                 event.get("tactics", {}).get("formation")
                 if isinstance(event.get("tactics"), dict)
@@ -433,3 +462,23 @@ class StatsBombOpenDataPreprocessor:
         row.update(_id_name_fields(event.get("interception"), "interception"))
         row.update(_id_name_fields(event.get("clearance"), "clearance"))
         return row
+
+    def _load_three_sixty_map(self, match_id: int) -> dict[str, dict[str, Any]]:
+        """Load standalone StatsBomb 360 frames for a match when available."""
+        source = self.raw_dir / "three-sixty" / f"{match_id}.json"
+        if not source.exists():
+            return {}
+
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        frames_by_event_id: dict[str, dict[str, Any]] = {}
+        for frame in payload:
+            if not isinstance(frame, dict):
+                continue
+            event_uuid = frame.get("event_uuid")
+            if not event_uuid:
+                continue
+            frames_by_event_id[str(event_uuid)] = {
+                "freeze_frame": frame.get("freeze_frame"),
+                "visible_area": frame.get("visible_area"),
+            }
+        return frames_by_event_id
