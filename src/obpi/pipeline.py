@@ -274,27 +274,38 @@ def run_fuzzy_pipeline(
     :func:`compute_all_metrics` and :func:`run_pipeline`; fuzzy aggregation is a
     separate downstream step that consumes their output.
     """
+    from obpi.fuzzy.processing import (
+        NORMALIZED_METRICS,
+        run_real_data_fuzzy_processing,
+    )
     from obpi.fuzzy.scoring import fit_fuzzy_engine, score_metrics_dataframe
 
     if set(_FUZZY_METRIC_COLUMNS).issubset(metrics_df.columns):
-        metric_names = _FUZZY_METRIC_COLUMNS
+        scored, _metadata = run_real_data_fuzzy_processing(
+            metrics_df,
+            id_columns=[
+                column
+                for column in metrics_df.columns
+                if column not in _FUZZY_METRIC_COLUMNS
+            ],
+            score_column=score_column,
+        )
     elif set(_NORMALIZED_METRIC_COLUMNS).issubset(metrics_df.columns):
         metric_names = _NORMALIZED_METRIC_COLUMNS
+        engine = fit_fuzzy_engine(metrics_df, metric_names=metric_names)
+        scored = score_metrics_dataframe(
+            metrics_df,
+            engine=engine,
+            metric_names=metric_names,
+            score_column=score_column,
+        )
     else:
         expected = ", ".join(_FUZZY_METRIC_COLUMNS)
-        normalized = ", ".join(_NORMALIZED_METRIC_COLUMNS)
+        normalized = ", ".join(NORMALIZED_METRICS)
         raise ValueError(
             "metrics_df must contain either pipeline metric columns "
             f"({expected}) or normalized columns ({normalized})"
         )
-
-    engine = fit_fuzzy_engine(metrics_df, metric_names=metric_names)
-    scored = score_metrics_dataframe(
-        metrics_df,
-        engine=engine,
-        metric_names=metric_names,
-        score_column=score_column,
-    )
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     scored.to_parquet(output, index=False)
