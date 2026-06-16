@@ -23,13 +23,16 @@ from obpi.ml.validation import (
     create_labels,
     evaluate_estimator,
     evaluate_holdout_predictions,
+    extract_prepared_xy,
     prepare_labeled_data,
     prepare_training_frame,
     save_training_preparation,
+    save_validation_results,
     train_logistic,
     train_svm,
     train_xgboost,
     validate,
+    validate_prepared_data,
 )
 
 __all__ = [
@@ -39,6 +42,7 @@ __all__ = [
     "compute_permutation_importance",
     "compute_shap",
     "create_labels",
+    "extract_prepared_xy",
     "evaluate_estimator",
     "evaluate_holdout_predictions",
     "get_metric_weights",
@@ -51,10 +55,12 @@ __all__ = [
     "run_ablation",
     "save_training_preparation",
     "save_metric_weights",
+    "save_validation_results",
     "spearman_correlation",
     "train_logistic",
     "train_svm",
     "train_xgboost",
     "validate",
+    "validate_prepared_data",
     "write_ablation_report",
 ]
