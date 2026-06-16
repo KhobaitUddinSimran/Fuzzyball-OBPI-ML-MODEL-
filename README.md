@@ -82,6 +82,47 @@ The machine learning layer works strictly as a **discriminant validation instrum
 pip install -r requirements.txt
 ```
 
+### Download full men's StatsBomb open data
+
+To pull every men's senior competition listed in the official open-data index,
+including competition metadata plus all linked match, event, and lineup files:
+
+```bash
+python scripts/download_statsbomb_mens_open_data.py --skip-existing
+```
+
+By default, files are stored in:
+
+```text
+data/raw/statsbomb_open_data/
+  competitions.json
+  matches/
+  events/
+  lineups/
+```
+
+Use `--output-dir` if you want to place the dataset somewhere else.
+
+### Preprocess downloaded open data
+
+Once the raw dataset is available locally, convert it into interim parquet
+tables and per-match event partitions:
+
+```bash
+python3 scripts/preprocess_statsbomb_open_data.py
+```
+
+This writes:
+
+```text
+data/interim/
+  competitions.parquet
+  matches.parquet
+  player_matches.parquet
+  events_manifest.parquet
+  events_by_match/
+```
+
 ### Running the pipeline
 
 ```bash
