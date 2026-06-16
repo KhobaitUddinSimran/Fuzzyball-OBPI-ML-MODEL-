@@ -164,22 +164,34 @@ def compute_cbi(
         if loc is None or i >= len(frames):
             continue
 
-        # Run vector: previous event → receipt
+        # Ball-to-player vector: from previous event location (pass origin) to receipt
         prev_events = df[df.index < row.name]
         if prev_events.empty:
             continue
         prev = prev_events.iloc[-1]
-        prev_loc = prev.get("location")
-        if prev_loc is None:
+        ball_loc = prev.get("location")
+        if ball_loc is None:
             continue
-        run_vec = np.array(
-            [float(loc[0]) - float(prev_loc[0]), float(loc[1]) - float(prev_loc[1])],
+        ball_to_player = np.array(
+            [float(loc[0]) - float(ball_loc[0]), float(loc[1]) - float(ball_loc[1])],
             dtype=np.float64,
         )
 
-        # Ball-to-player vector: use previous event's player location as ball origin proxy
-        ball_to_player = np.array(
-            [float(loc[0]) - float(prev_loc[0]), float(loc[1]) - float(prev_loc[1])],
+        # Run vector: receiver's own previous location → receipt location
+        receiver_prev = prev_events[prev_events.apply(
+            lambda r, pid=player_id: (
+                _get_player_id(r) == pid
+                and r.get("location") is not None
+            ),
+            axis=1,
+        )]
+        if receiver_prev.empty:
+            continue
+        run_origin = receiver_prev.iloc[-1].get("location")
+        if run_origin is None:
+            continue
+        run_vec = np.array(
+            [float(loc[0]) - float(run_origin[0]), float(loc[1]) - float(run_origin[1])],
             dtype=np.float64,
         )
 
@@ -202,7 +214,7 @@ def compute_cbi(
             if not p.get("teammate", True) and p.get("location") is not None
         ]
 
-        if not _passing_lane_open(prev_loc, loc, opponents, lane_buffer):
+        if not _passing_lane_open(ball_loc, loc, opponents, lane_buffer):
             continue
 
         count += 1

@@ -143,7 +143,8 @@ class TestLpc:
             },
         ]
         events = self._make_events(rows)
-        xt_model = XTModel()
+        synthetic_grid = np.linspace(0.01, 0.30, 12) * np.ones((8, 1))
+        xt_model = XTModel(grid=synthetic_grid)
         lpc = compute_lpc(events, player_id=1, xt_model=xt_model, min_dt=1.2, max_vel=0.5)
         assert lpc == pytest.approx(1.0)
 
@@ -168,7 +169,8 @@ class TestLpc:
             },
         ]
         events = self._make_events(rows)
-        xt_model = XTModel()
+        synthetic_grid = np.linspace(0.01, 0.30, 12) * np.ones((8, 1))
+        xt_model = XTModel(grid=synthetic_grid)
         lpc = compute_lpc(events, player_id=1, xt_model=xt_model, min_dt=1.2, max_vel=0.5)
         assert lpc == pytest.approx(0.0)
 
@@ -199,6 +201,13 @@ class TestCbi:
         rows = [
             {
                 "type": {"name": "Pass"},
+                "player": {"id": 1},
+                "location": [55.0, 40.0],
+                "timestamp": "00:09:59.000",
+                "period": 1,
+            },
+            {
+                "type": {"name": "Pass"},
                 "player": {"id": 2},
                 "location": [50.0, 40.0],
                 "timestamp": "00:10:00.000",
@@ -215,11 +224,50 @@ class TestCbi:
         events = self._make_events(rows)
         frames = [self._make_frame(opponent_locs=[])]
         cbi = compute_cbi(events, frames, player_id=1, angle_threshold=30.0, lane_buffer=1.5)
+        # run_vec = [5, 0] (55→60), ball_to_player = [10, 0] (50→60) → aligned
         assert cbi == pytest.approx(1.0)
+
+    def test_misaligned_run(self) -> None:
+        """Run at 90° to ball vector → count = 0."""
+        rows = [
+            {
+                "type": {"name": "Pass"},
+                "player": {"id": 1},
+                "location": [60.0, 35.0],
+                "timestamp": "00:09:59.000",
+                "period": 1,
+            },
+            {
+                "type": {"name": "Pass"},
+                "player": {"id": 2},
+                "location": [50.0, 40.0],
+                "timestamp": "00:10:00.000",
+                "period": 1,
+            },
+            {
+                "type": {"name": "Ball Receipt*"},
+                "player": {"id": 1},
+                "location": [60.0, 40.0],
+                "timestamp": "00:10:01.000",
+                "period": 1,
+            },
+        ]
+        events = self._make_events(rows)
+        frames = [self._make_frame(opponent_locs=[])]
+        cbi = compute_cbi(events, frames, player_id=1, angle_threshold=30.0, lane_buffer=1.5)
+        # run_vec = [0, 5] (35→40), ball_to_player = [10, 0] (50→60) → 90° angle
+        assert cbi == pytest.approx(0.0)
 
     def test_blocked_lane(self) -> None:
         """Opponent on the passing line → count = 0."""
         rows = [
+            {
+                "type": {"name": "Pass"},
+                "player": {"id": 1},
+                "location": [55.0, 40.0],
+                "timestamp": "00:09:59.000",
+                "period": 1,
+            },
             {
                 "type": {"name": "Pass"},
                 "player": {"id": 2},

@@ -44,24 +44,24 @@ def compute_sci(
     if not frames_before or not frames_after:
         return 0.0
 
-    before = frames_before[0]
-    after = frames_after[0]
+    gains: list[float] = []
+    for before, after in zip(frames_before, frames_after):
+        team_before = _get_team_locations(before, teammate=True)
+        team_after = _get_team_locations(after, teammate=True)
 
-    team_before = _get_team_locations(before, teammate=True)
-    team_after = _get_team_locations(after, teammate=True)
+        if len(team_before) < 3 or len(team_after) < 3:
+            continue
 
-    if len(team_before) < 3 or len(team_after) < 3:
-        return 0.0
+        areas_before = geometry.voronoi_areas(team_before)
+        areas_after = geometry.voronoi_areas(team_after)
 
-    areas_before = geometry.voronoi_areas(team_before)
-    areas_after = geometry.voronoi_areas(team_after)
+        n = min(len(areas_before), len(areas_after))
+        if n == 0:
+            continue
 
-    n = min(len(areas_before), len(areas_after))
-    if n == 0:
-        return 0.0
+        gains.extend([areas_after[i] - areas_before[i] for i in range(n)])
 
-    gains = [areas_after[i] - areas_before[i] for i in range(n)]
-    return float(np.mean(gains))
+    return float(np.mean(gains)) if gains else 0.0
 
 
 def compute_sc(
@@ -85,21 +85,11 @@ def compute_sc(
         threshold: Minimum adjusted shift (m) to count as a screen.
 
     Returns:
-        Screen count (0 or 1 for a single action).
+        Mean screen count across all frame pairs (0.0–1.0).
     """
     if not frames_before or not frames_after:
         return 0.0
 
-    before = frames_before[0]
-    after = frames_after[0]
-
-    opp_before = _get_team_locations(before, teammate=False)
-    opp_after = _get_team_locations(after, teammate=False)
-
-    if len(opp_before) == 0 or len(opp_after) == 0:
-        return 0.0
-
-    # Local defenders: inside box centred on player_location
     px, py = float(player_location[0]), float(player_location[1])
     hw, hh = box_size[0] / 2.0, box_size[1] / 2.0
 
@@ -114,21 +104,34 @@ def compute_sc(
         )
         return points[mask]
 
-    local_before = _in_box(opp_before)
-    local_after = _in_box(opp_after)
+    screens: list[float] = []
+    for before, after in zip(frames_before, frames_after):
+        opp_before = _get_team_locations(before, teammate=False)
+        opp_after = _get_team_locations(after, teammate=False)
 
-    # Mean positions
-    local_before_mean = (
-        np.mean(local_before, axis=0) if len(local_before) > 0 else np.array([px, py])
-    )
-    local_after_mean = (
-        np.mean(local_after, axis=0) if len(local_after) > 0 else np.array([px, py])
-    )
-    global_before_mean = np.mean(opp_before, axis=0)
-    global_after_mean = np.mean(opp_after, axis=0)
+        if len(opp_before) == 0 or len(opp_after) == 0:
+            continue
 
-    local_shift = float(np.linalg.norm(local_after_mean - local_before_mean))
-    global_shift = float(np.linalg.norm(global_after_mean - global_before_mean))
-    adjusted_shift = local_shift - global_shift
+        local_before = _in_box(opp_before)
+        local_after = _in_box(opp_after)
 
-    return 1.0 if adjusted_shift > threshold else 0.0
+        local_before_mean = (
+            np.mean(local_before, axis=0)
+            if len(local_before) > 0
+            else np.array([px, py])
+        )
+        local_after_mean = (
+            np.mean(local_after, axis=0)
+            if len(local_after) > 0
+            else np.array([px, py])
+        )
+        global_before_mean = np.mean(opp_before, axis=0)
+        global_after_mean = np.mean(opp_after, axis=0)
+
+        local_shift = float(np.linalg.norm(local_after_mean - local_before_mean))
+        global_shift = float(np.linalg.norm(global_after_mean - global_before_mean))
+        adjusted_shift = local_shift - global_shift
+
+        screens.append(1.0 if adjusted_shift > threshold else 0.0)
+
+    return float(np.mean(screens)) if screens else 0.0

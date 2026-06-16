@@ -51,12 +51,18 @@ def infer_velocity(
             == player_id
         ]
 
+    if df.empty:
+        df = df.copy()
+        for col in ["time_sec", "x", "y", "dt", "dx", "dy", "velocity", "vx", "vy"]:
+            df[col] = pd.Series(dtype=float)
+        return df
+
     # Chronological sort
     df = df.sort_values(["period", "timestamp"]).reset_index(drop=True)
 
     # Convert timestamps to continuous seconds
-    df["time_sec"] = df["timestamp"].apply(_parse_timestamp)
-    df["period_offset"] = df["period"].apply(lambda p: 0 if p == 1 else 45 * 60)
+    df["time_sec"] = df["timestamp"].apply(_parse_timestamp).astype(float)
+    df["period_offset"] = df["period"].apply(lambda p: 0 if p == 1 else 45 * 60).astype(float)
     df["time_sec"] = df["time_sec"] + df["period_offset"]
 
     # Extract x, y from location lists

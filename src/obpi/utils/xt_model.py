@@ -1,5 +1,6 @@
 """Expected Threat (xT) model — Karun Singh 12×8 grid."""
 
+from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
@@ -29,17 +30,21 @@ class XTModel:
     """
 
     def __init__(self, grid: NDArray[np.float64] | None = None) -> None:
-        """Initialize with a custom grid or the default synthetic grid.
+        """Initialize with a custom grid, trained grid file, or synthetic fallback.
 
         Args:
-            grid: Optional 2D array of shape (8, 12). If ``None``, a
-                synthetic grid is built where values rise from 0.01
-                (own goal) to 0.30 (opponent goal).
+            grid: Optional 2D array of shape (8, 12). If ``None``, attempts to
+                load ``data/processed/xt_grid_12x8.npy``; falls back to a
+                synthetic grid if the file is missing.
         """
         if grid is not None:
             self.grid = grid
         else:
-            self.grid = self._default_grid()
+            trained_path = Path("data/processed/xt_grid_12x8.npy")
+            if trained_path.exists():
+                self.grid = np.load(trained_path)
+            else:
+                self.grid = self._default_grid()
         assert self.grid.shape == (_GRID_ROWS, _GRID_COLS)
 
     @staticmethod

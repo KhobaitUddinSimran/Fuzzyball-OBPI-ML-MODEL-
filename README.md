@@ -76,8 +76,75 @@ The machine learning layer works strictly as a **discriminant validation instrum
 
 ## 🛠️ 4. Setup & Python Control Engine Initialization
 
+### Installation
+
 ```bash
-pip install statsbombpy scikit-fuzzy scipy scikit-learn pandas numpy
+pip install -r requirements.txt
+```
+
+### Running the pipeline
+
+```bash
+python -m obpi.pipeline --match-id 3794686 --verbose
+```
+
+CLI flags:
+- `--match-id` (required): StatsBomb match identifier.
+- `--tier`: Data tier — `open` (default) or `api`.
+- `--config`: Path to custom YAML config (default: `config/default.yaml`).
+- `--output`: Cache directory for Parquet files (default: `data/processed`).
+- `--verbose`: Enable debug logging.
+
+### Training the xT model
+
+```bash
+python -m obpi.ml.xt_trainer
+```
+
+This downloads open-data shots with 360 frames, trains a logistic-regression xG model, smooths the resulting 12×8 grid with a Gaussian kernel, and saves it to `data/processed/xt_grid_12x8.npy`. The `XTModel` class loads this grid automatically when present; otherwise it falls back to a synthetic ramp.
+
+### Configuration
+
+All hard-coded thresholds have been moved to `config/default.yaml`:
+
+```yaml
+movement:
+  v_threshold: 2.5
+  duration_threshold: 0.4
+  max_dt: 1.5
+
+receiving:
+  proximity_threshold: 2.5
+  pressure_radius: 5.0
+  cone_angle: 45.0
+  cone_length: 15.0
+
+temporal:
+  min_dt: 1.2
+  max_vel: 0.5
+  angle_threshold: 30.0
+  lane_buffer: 1.5
+```
+
+Override any value by passing a custom YAML file via `--config`.
+
+### Validation
+
+```python
+from obpi.validation.checks import validate
+
+result = validate(df)
+assert result["valid"]  # schema, finiteness, and range checks
+print(result["summary"])  # per-metric mean / std / min / max
+```
+
+### Logging
+
+Structured logging is configured via `obpi.utils.logger.setup_logging`. When `--verbose` is passed, debug-level logs include match-level event/frame counts and cache hit/miss messages.
+
+### Legacy fuzzy snippet
+
+```python
 import numpy as np
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
@@ -96,3 +163,4 @@ rule2 = ctrl.Rule(metric_in['Medium'], score_out['Medium'])
 rule3 = ctrl.Rule(metric_in['High'], score_out['High'])
 
 obpi_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem([rule1, rule2, rule3]))
+```

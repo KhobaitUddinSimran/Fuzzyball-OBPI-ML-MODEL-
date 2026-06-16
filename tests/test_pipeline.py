@@ -236,6 +236,7 @@ class TestRunPipeline:
                 "M7_SCI": [0.5],
                 "M8_LPC": [0.5],
                 "M9_CBI": [0.5],
+                "_schema_version": [2],
             }
         )
         cached_df.to_parquet(cached, index=False)
