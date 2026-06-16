@@ -19,6 +19,14 @@ from obpi.pipeline import compute_all_metrics
 from obpi.utils.xt_model import XTModel
 
 
+def _fmt_time(sec: float) -> str:
+    """Format seconds as HH:MM:SS.000."""
+    h = int(sec // 3600)
+    m = int((sec % 3600) // 60)
+    s = int(sec % 60)
+    return f"{h:02d}:{m:02d}:{s:02d}.000"
+
+
 def _make_events(rows: list[dict[str, Any]]) -> pd.DataFrame:
     """Helper to build a DataFrame from row dicts."""
     return pd.DataFrame(rows)
@@ -526,7 +534,7 @@ class TestRichSyntheticMatch:
             # preceding pass by teammate
             rows.append(
                 {
-                    "timestamp": f"00:{int((base_time + i * 30) // 60):02d}:{int((base_time + i * 30) % 60):02d}.000",
+                    "timestamp": _fmt_time(base_time + i * 30),
                     "location": [40.0, 30.0 + i * 2],
                     "period": 1,
                     "play_pattern": {"name": "Regular Play"},
@@ -537,11 +545,10 @@ class TestRichSyntheticMatch:
             # receipt by Player 10
             receipt_x = 50.0 + i * 5
             receipt_y = 35.0 + i * 2
-            behind = receipt_x >= 60.0
             pressured = i % 3 == 0  # True for i=0,3
             rows.append(
                 {
-                    "timestamp": f"00:{int((base_time + i * 30 + 1) // 60):02d}:{int((base_time + i * 30 + 1) % 60):02d}.000",
+                    "timestamp": _fmt_time(base_time + i * 30 + 1),
                     "location": [receipt_x, receipt_y],
                     "period": 1,
                     "play_pattern": {"name": "Regular Play"},
@@ -555,7 +562,7 @@ class TestRichSyntheticMatch:
             pass_time = base_time + i * 30 + (4 if pause else 1)
             rows.append(
                 {
-                    "timestamp": f"00:{int(pass_time // 60):02d}:{int(pass_time % 60):02d}.000",
+                    "timestamp": _fmt_time(pass_time),
                     "location": [receipt_x, receipt_y],
                     "period": 1,
                     "play_pattern": {"name": "Regular Play"},
@@ -570,7 +577,7 @@ class TestRichSyntheticMatch:
         for run_start in [800.0, 850.0, 900.0]:
             rows.append(
                 {
-                    "timestamp": f"00:{int(run_start // 60):02d}:{int(run_start % 60):02d}.000",
+                    "timestamp": _fmt_time(run_start),
                     "location": [60.0, 40.0],
                     "period": 1,
                     "play_pattern": {"name": "Regular Play"},
@@ -580,7 +587,7 @@ class TestRichSyntheticMatch:
             )
             rows.append(
                 {
-                    "timestamp": f"00:{int((run_start + 1) // 60):02d}:{int((run_start + 1) % 60):02d}.000",
+                    "timestamp": _fmt_time(run_start + 1),
                     "location": [80.0, 40.0],
                     "period": 1,
                     "play_pattern": {"name": "Regular Play"},
@@ -591,7 +598,7 @@ class TestRichSyntheticMatch:
             )
             rows.append(
                 {
-                    "timestamp": f"00:{int((run_start + 2) // 60):02d}:{int((run_start + 2) % 60):02d}.000",
+                    "timestamp": _fmt_time(run_start + 2),
                     "location": [81.0, 40.0],
                     "period": 1,
                     "play_pattern": {"name": "Regular Play"},
@@ -637,7 +644,7 @@ class TestRichSyntheticMatch:
         for i in range(4):
             rows.append(
                 {
-                    "timestamp": f"00:{int((700 + i * 40) // 60):02d}:{int((700 + i * 40) % 60):02d}.000",
+                    "timestamp": _fmt_time(700 + i * 40),
                     "location": [45.0, 40.0],
                     "period": 1,
                     "play_pattern": {"name": "Regular Play"},
@@ -649,7 +656,11 @@ class TestRichSyntheticMatch:
 
         events = pd.DataFrame(rows)
         events["_ts_sec"] = events["timestamp"].apply(
-            lambda ts: float(ts.split(":")[0]) * 3600 + float(ts.split(":")[1]) * 60 + float(ts.split(":")[2])
+            lambda ts: (
+                float(ts.split(":")[0]) * 3600
+                + float(ts.split(":")[1]) * 60
+                + float(ts.split(":")[2])
+            )
         )
         events = events.sort_values(by=["period", "_ts_sec"]).reset_index(drop=True)
         events = events.drop(columns=["_ts_sec"])
@@ -667,7 +678,7 @@ class TestRichSyntheticMatch:
                 )
             )
         # Player 20 frames
-        for i in range(4):
+        for _i in range(4):
             frames.append(
                 _make_frame(
                     teammate_locs=[[42.0, 38.0], [48.0, 42.0]],
@@ -688,9 +699,8 @@ class TestRichSyntheticMatch:
 
         df = compute_all_metrics(match_id=100, xt_model=XTModel())
         p10 = df[df["player_id"] == 10].iloc[0]
-        # 7 receipts for player 10: i=0,3 pressured (2); i=1,2,4 not (3) + 3 run receipts not pressured
-        # Actually let's count: 5 receipt sequences + 3 run receipts + 1 sideways receipt = 9 receipts
-        # pressured on i=0,3 in sequences = 2; run receipts not pressured = 3; sideways not pressured = 1
+        # Player 10 receipts: 5 sequences + 3 run + 1 sideways = 9
+        # Pressured: i=0,3 in sequences = 2
         # Total receipts = 9, pressured = 2 → RUP ≈ 0.222
         assert 0.15 < p10["M6_RUP"] < 0.35
 
