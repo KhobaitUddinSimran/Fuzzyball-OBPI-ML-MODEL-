@@ -17,7 +17,6 @@ def fit_fuzzy_engine(
     metric_weights: Mapping[str, float] | None = None,
 ) -> FuzzyEngine:
     """Fit a data-calibrated fuzzy engine from normalized metric columns."""
-
     metric_list = list(metric_names)
     membership_functions = build_metric_memberships(metrics_df, metric_list)
     return FuzzyEngine(
@@ -34,7 +33,6 @@ def score_metrics_dataframe(
     score_column: str = "obpi",
 ) -> pd.DataFrame:
     """Return a copy of ``metrics_df`` with one OBPI score per row."""
-
     metric_list = list(metric_names)
     missing = set(metric_list) - set(metrics_df.columns)
     if missing:

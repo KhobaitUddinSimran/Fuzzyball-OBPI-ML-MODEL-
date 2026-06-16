@@ -8,6 +8,7 @@ from obpi.fuzzy.scoring import score_csv
 
 
 def main() -> None:
+    """Run the fuzzy scoring CLI."""
     parser = argparse.ArgumentParser(description="Score OBPI metrics with the fuzzy engine.")
     parser.add_argument("input_csv", help="CSV containing M1..M9 metric columns")
     parser.add_argument("output_csv", help="Path where scored CSV should be written")

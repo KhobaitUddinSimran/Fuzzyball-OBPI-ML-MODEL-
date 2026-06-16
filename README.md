@@ -76,8 +76,75 @@ The machine learning layer works strictly as a **discriminant validation instrum
 
 ## 🛠️ 4. Setup & Python Control Engine Initialization
 
+### Installation
+
 ```bash
-pip install statsbombpy scikit-fuzzy scipy scikit-learn pandas numpy
+pip install -r requirements.txt
+```
+
+### Running the pipeline
+
+```bash
+python -m obpi.pipeline --match-id 3794686 --verbose
+```
+
+CLI flags:
+- `--match-id` (required): StatsBomb match identifier.
+- `--tier`: Data tier — `open` (default) or `api`.
+- `--config`: Path to custom YAML config (default: `config/default.yaml`).
+- `--output`: Cache directory for Parquet files (default: `data/processed`).
+- `--verbose`: Enable debug logging.
+
+### Training the xT model
+
+```bash
+python -m obpi.ml.xt_trainer
+```
+
+This downloads open-data shots with 360 frames, trains a logistic-regression xG model, smooths the resulting 12×8 grid with a Gaussian kernel, and saves it to `data/processed/xt_grid_12x8.npy`. The `XTModel` class loads this grid automatically when present; otherwise it falls back to a synthetic ramp.
+
+### Configuration
+
+All hard-coded thresholds have been moved to `config/default.yaml`:
+
+```yaml
+movement:
+  v_threshold: 2.5
+  duration_threshold: 0.4
+  max_dt: 1.5
+
+receiving:
+  proximity_threshold: 2.5
+  pressure_radius: 5.0
+  cone_angle: 45.0
+  cone_length: 15.0
+
+temporal:
+  min_dt: 1.2
+  max_vel: 0.5
+  angle_threshold: 30.0
+  lane_buffer: 1.5
+```
+
+Override any value by passing a custom YAML file via `--config`.
+
+### Validation
+
+```python
+from obpi.validation.checks import validate
+
+result = validate(df)
+assert result["valid"]  # schema, finiteness, and range checks
+print(result["summary"])  # per-metric mean / std / min / max
+```
+
+### Logging
+
+Structured logging is configured via `obpi.utils.logger.setup_logging`. When `--verbose` is passed, debug-level logs include match-level event/frame counts and cache hit/miss messages.
+
+### Legacy fuzzy snippet
+
+```python
 import numpy as np
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
@@ -98,120 +165,19 @@ rule3 = ctrl.Rule(metric_in['High'], score_out['High'])
 obpi_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem([rule1, rule2, rule3]))
 ```
 
-## 5. Fuzzy Branch Quick Start
+### Fuzzy aggregation as downstream scoring
 
-This branch includes a runnable starter pipeline for Person 2's fuzzy logic work.
-Given a metrics table with normalized columns `M1` through `M9`, score it with:
-
-```bash
-python -m pip install -e .
-obpi-score data/processed/metrics.csv results/scored_metrics.csv \
-  --membership-report results/membership_report.json
-```
-
-The command fits percentile-calibrated membership functions from the input table,
-adds an `obpi` score column in `[0, 1]`, and prints a JSON summary. CSV and Parquet
-paths are supported. The optional membership report exports the fitted P20, P40,
-P50, P60, and P80 cutoffs plus the Low/Medium/High trapezoid points for every
-metric.
-
-Run the Week 5 synthetic full-table demo with:
-
-```bash
-python scripts/week5_demo_scoring.py
-```
-
-The demo reads `data/sample/synthetic_metrics.csv` and writes:
-
-```text
-results/week5_scored_metrics.csv
-results/week5_membership_report.json
-```
-
-To run the current checks:
-
-```bash
-python -m pytest
-python -m ruff check .
-python -m mypy src
-```
-
-## 6. Week 6 Validation Status
-
-The ML validation suite lives in `src/obpi/ml/validation.py`.
-
-Implemented:
-- `create_labels(obpi_scores)`: top 25% = class 1, bottom 25% = class 0, middle 50% discarded.
-- `prepare_labeled_data(metrics_df)`: validates M1-M9 plus the OBPI score column.
-- `train_logistic(x, y)`: standardized logistic-regression baseline.
-- `train_svm(x, y)`: standardized RBF SVM grid search.
-- `train_xgboost(x, y)`: optional wrapper requiring the `xgboost` dependency.
-- `evaluate_estimator(...)`: accuracy, ROC-AUC, and class-1 recall with stratified CV.
-- `validate(metrics_df)`: report API for later FastAPI integration.
-
-Example:
+The M1-M9 metrics engine remains the source of truth. Fuzzy aggregation is an
+additive downstream step that consumes an existing metrics DataFrame:
 
 ```python
-import pandas as pd
-from obpi.ml.validation import validate
+from obpi.pipeline import compute_all_metrics, run_fuzzy_pipeline
 
-metrics_df = pd.read_csv("results/week5_scored_metrics.csv")
-report = validate(metrics_df, score_column="obpi", include_xgboost=False)
+metrics_df = compute_all_metrics(match_id=3794686)
+scored_df = run_fuzzy_pipeline(metrics_df)
 ```
 
-Real StatsBomb-derived M1-M9 rows are required before interpreting validation
-accuracy, ROC-AUC, SHAP importance, ablation results, or benchmark/expert
-correlations. Synthetic results are only pipeline smoke tests.
-
-## 7. Week 7 Explainability Status
-
-The explainability helpers live in `src/obpi/ml/explainability.py`.
-
-Implemented:
-- `compute_shap(model, x)`: lazy SHAP TreeExplainer wrapper for the future XGBoost model.
-- `get_metric_weights(importances)`: normalizes SHAP/permutation importances into weights that sum to 1.0.
-- `compute_permutation_importance(model, x, y)`: scikit-learn permutation sanity check.
-- `save_metric_weights(weights, output_path)`: writes dashboard/API-ready JSON weights.
-
-Synthetic smoke-test artifacts:
-
-```text
-results/permutation_importance.csv
-results/metric_weights.json
-results/VALIDATION_REPORT.md
-```
-
-These artifacts prove the Week 7 plumbing works, but they are not tactical
-findings. Final Week 7 interpretation requires real M1-M9 rows and the trained
-XGBoost model.
-
-## 8. Week 8 API, Ablation, and Correlation Prep
-
-Week 8 support code now includes:
-- `obpi.ml.validate(metrics_df)`: report API for FastAPI/dashboard integration.
-- `obpi.ml.run_ablation(metrics_df)`: leave-one-metric-out validation study.
-- `obpi.ml.spearman_correlation(obpi_scores, comparison_scores)`: proxy/expert correlation helper.
-- `obpi.ml.cronbach_alpha(expert_ratings_df)`: inter-rater reliability helper.
-
-These can run on synthetic data today, but real use requires a processed metrics
-table with `player_id`, `match_id`, `minutes`, `M1`-`M9`, and `obpi`.
-
-## 9. Week 9 Ablation and Benchmarking Prep
-
-Week 9 support code now includes:
-- `obpi.ml.compare_benchmarks(obpi_scores, benchmarks)`.
-- `obpi.ml.orthogonal_variance_test(scores_df)` for PCA variance checks.
-- Markdown/CSV ablation reporting.
-
-Synthetic smoke-test artifacts:
-
-```text
-results/ablation_results.csv
-results/ABLATION_BENCHMARK.md
-results/benchmark_correlations.csv
-results/pca_benchmark.json
-```
-
-Final Week 9 conclusions require real OBPI rows plus external benchmark columns
-for the same players, such as xThreat-style scores or expert/market benchmark
-ratings.
+`run_fuzzy_pipeline()` supports both the pipeline metric schema
+(`M1_SC`, `M2_OIRC`, ..., `M9_CBI`) and normalized Person 2 columns
+(`M1`, `M2`, ..., `M9`). It writes an OBPI score column in `[0, 1]` without
+modifying or replacing the existing metrics pipeline.

@@ -9,7 +9,7 @@ from typing import Union
 import numpy as np
 import pandas as pd
 
-MembershipValue = Union[float, np.ndarray]
+MembershipValue = Union[float, np.ndarray]  # noqa: UP007
 MembershipCallable = Callable[[MembershipValue], MembershipValue]
 
 
@@ -27,7 +27,6 @@ class MembershipFunctions:
 
     def to_dict(self) -> dict[str, dict[str, float] | list[float]]:
         """Return a JSON-serializable summary for inspection/export."""
-
         return {
             "percentiles": self.percentiles,
             "low_points": self.low_points,
@@ -38,7 +37,6 @@ class MembershipFunctions:
 
 def trapmf(x: float | np.ndarray, points: list[float]) -> float | np.ndarray:
     """Evaluate a trapezoidal membership function."""
-
     a, b, c, d = points
     values = np.asarray(x, dtype=float)
     result = np.zeros_like(values, dtype=float)
@@ -64,7 +62,6 @@ def build_membership_functions(values: np.ndarray) -> MembershipFunctions:
     ``trapmf(P20, P40, P60, P80)``, and High as ``trapmf(P50, P80, 1, 1)``.
     Input values are clipped into the normalized metric universe [0, 1].
     """
-
     clean_values = np.asarray(values, dtype=float)
     clean_values = clean_values[np.isfinite(clean_values)]
     if clean_values.size == 0:
@@ -105,7 +102,6 @@ def build_metric_memberships(
     metric_names: list[str],
 ) -> dict[str, MembershipFunctions]:
     """Build membership functions for every OBPI metric column."""
-
     missing = set(metric_names) - set(metrics_df.columns)
     if missing:
         missing_text = ", ".join(sorted(missing))
@@ -121,7 +117,6 @@ def summarize_metric_memberships(
     memberships: Mapping[str, MembershipFunctions],
 ) -> dict[str, dict[str, dict[str, float] | list[float]]]:
     """Return JSON-serializable membership metadata by metric."""
-
     return {
         metric_name: membership.to_dict()
         for metric_name, membership in memberships.items()

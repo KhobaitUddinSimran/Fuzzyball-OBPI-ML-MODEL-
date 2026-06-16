@@ -21,6 +21,7 @@ class FuzzyEngine:
         metric_weights: Mapping[str, float] | None = None,
         universe: np.ndarray | None = None,
     ) -> None:
+        """Initialize the fuzzy aggregation engine."""
         self.metric_names = tuple(metric_names)
         if not self.metric_names:
             raise ValueError("metric_names must not be empty")
@@ -31,7 +32,6 @@ class FuzzyEngine:
 
     def compute(self, metrics: Mapping[str, float]) -> float:
         """Compute one corrected OBPI score from crisp metric inputs."""
-
         missing = set(self.metric_names) - set(metrics)
         if missing:
             missing_text = ", ".join(sorted(missing))
@@ -50,13 +50,11 @@ class FuzzyEngine:
 
     def compute_many(self, rows: Sequence[Mapping[str, float]]) -> np.ndarray:
         """Compute corrected OBPI scores for multiple metric dictionaries."""
-
         return np.asarray([self.compute(row) for row in rows], dtype=float)
 
     @staticmethod
     def correct_range(value: float, low: float = 0.15, high: float = 0.85) -> float:
         """Linearly expand centroid-compressed scores into [0, 1]."""
-
         if high <= low:
             raise ValueError("high must be greater than low")
         corrected = (value - low) / (high - low)
@@ -85,7 +83,7 @@ class FuzzyEngine:
         metric_weights: Mapping[str, float] | None,
     ) -> dict[str, float]:
         if metric_weights is None:
-            return {metric_name: 1.0 for metric_name in self.metric_names}
+            return dict.fromkeys(self.metric_names, 1.0)
 
         missing = set(self.metric_names) - set(metric_weights)
         if missing:
@@ -101,4 +99,3 @@ class FuzzyEngine:
         if sum(weights.values()) == 0.0:
             raise ValueError("at least one metric weight must be positive")
         return weights
-

@@ -1,58 +1,270 @@
-import json
+"""Integration tests for the OBPI pipeline orchestrator."""
 
-import numpy as np
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
+import pytest
 
-from obpi.pipeline import build_parser, main, read_metrics_table, run_scoring_pipeline
-
-
-def test_run_scoring_pipeline_writes_scored_csv(tmp_path) -> None:
-    input_path = tmp_path / "metrics.csv"
-    output_path = tmp_path / "scored.csv"
-    membership_report_path = tmp_path / "memberships.json"
-    metrics_df = pd.DataFrame(
-        [{f"M{i}": value for i in range(1, 10)} for value in np.linspace(0, 1, 12)]
-    )
-    metrics_df.insert(0, "player_id", range(len(metrics_df)))
-    metrics_df.to_csv(input_path, index=False)
-
-    summary = run_scoring_pipeline(
-        input_path,
-        output_path,
-        membership_report_path=membership_report_path,
-    )
-    scored_df = read_metrics_table(output_path)
-    membership_report = json.loads(membership_report_path.read_text())
-
-    assert summary["rows_scored"] == 12
-    assert summary["score_column"] == "obpi"
-    assert summary["membership_report_path"] == str(membership_report_path)
-    assert "obpi" in scored_df.columns
-    assert scored_df["obpi"].between(0.0, 1.0).all()
-    assert "M1" in membership_report
-    assert "low_points" in membership_report["M1"]
+from obpi.pipeline import (
+    _extract_unique_players,
+    compute_all_metrics,
+    run_fuzzy_pipeline,
+    run_pipeline,
+)
+from obpi.utils.xt_model import XTModel
 
 
-def test_cli_scores_csv_and_prints_summary(tmp_path, capsys) -> None:
-    input_path = tmp_path / "metrics.csv"
-    output_path = tmp_path / "scored.csv"
-    pd.DataFrame(
-        [{f"M{i}": value for i in range(1, 10)} for value in np.linspace(0, 1, 10)]
-    ).to_csv(input_path, index=False)
+def _make_synthetic_events(match_id: int = 999999) -> pd.DataFrame:
+    """Build a small events DataFrame mimicking StatsBomb schema."""
+    rows: list[dict[str, Any]] = [
+        {
+            "id": 1,
+            "match_id": match_id,
+            "index": 1,
+            "period": 1,
+            "timestamp": "00:01:00.000",
+            "minute": 1,
+            "second": 0,
+            "type": {"id": 30, "name": "Pass"},
+            "possession": 1,
+            "possession_team": {"id": 1, "name": "Home"},
+            "team": {"id": 1, "name": "Home"},
+            "player": {"id": 1001, "name": "Alice"},
+            "position": {"id": 15, "name": "LCM"},
+            "location": [60.0, 40.0],
+            "under_pressure": False,
+            "play_pattern": {"id": 1, "name": "Regular Play"},
+        },
+        {
+            "id": 2,
+            "match_id": match_id,
+            "index": 2,
+            "period": 1,
+            "timestamp": "00:01:02.000",
+            "minute": 1,
+            "second": 2,
+            "type": {"id": 42, "name": "Ball Receipt*"},
+            "possession": 1,
+            "possession_team": {"id": 1, "name": "Home"},
+            "team": {"id": 1, "name": "Home"},
+            "player": {"id": 1001, "name": "Alice"},
+            "position": {"id": 15, "name": "LCM"},
+            "location": [70.0, 40.0],
+            "under_pressure": False,
+            "play_pattern": {"id": 1, "name": "Regular Play"},
+        },
+        {
+            "id": 3,
+            "match_id": match_id,
+            "index": 3,
+            "period": 1,
+            "timestamp": "00:02:00.000",
+            "minute": 2,
+            "second": 0,
+            "type": {"id": 30, "name": "Pass"},
+            "possession": 1,
+            "possession_team": {"id": 1, "name": "Home"},
+            "team": {"id": 1, "name": "Home"},
+            "player": {"id": 1002, "name": "Bob"},
+            "position": {"id": 10, "name": "RCM"},
+            "location": [80.0, 40.0],
+            "under_pressure": True,
+            "play_pattern": {"id": 1, "name": "Regular Play"},
+        },
+        {
+            "id": 4,
+            "match_id": match_id,
+            "index": 4,
+            "period": 1,
+            "timestamp": "00:02:05.000",
+            "minute": 2,
+            "second": 5,
+            "type": {"id": 42, "name": "Ball Receipt*"},
+            "possession": 1,
+            "possession_team": {"id": 1, "name": "Home"},
+            "team": {"id": 1, "name": "Home"},
+            "player": {"id": 1002, "name": "Bob"},
+            "position": {"id": 10, "name": "RCM"},
+            "location": [85.0, 40.0],
+            "under_pressure": True,
+            "play_pattern": {"id": 1, "name": "Regular Play"},
+        },
+    ]
+    return pd.DataFrame(rows)
 
-    exit_code = main([str(input_path), str(output_path)])
-    summary = json.loads(capsys.readouterr().out)
 
-    assert exit_code == 0
-    assert output_path.exists()
-    assert summary["output_path"] == str(output_path)
-    assert summary["rows_scored"] == 10
+def _make_synthetic_frames() -> list[dict[str, Any]]:
+    """Return two synthetic 360 freeze frames."""
+    return [
+        {
+            "event_uuid": "evt-1",
+            "match_id": 999999,
+            "visible_area": [0, 0, 120, 80],
+            "freeze_frame": [
+                {"teammate": True, "actor": True, "keeper": False, "location": [60.0, 40.0]},
+                {"teammate": True, "actor": False, "keeper": False, "location": [55.0, 35.0]},
+                {"teammate": True, "actor": False, "keeper": False, "location": [62.0, 45.0]},
+                {"teammate": False, "actor": False, "keeper": False, "location": [65.0, 42.0]},
+                {"teammate": False, "actor": False, "keeper": False, "location": [68.0, 38.0]},
+            ],
+        },
+        {
+            "event_uuid": "evt-2",
+            "match_id": 999999,
+            "visible_area": [0, 0, 120, 80],
+            "freeze_frame": [
+                {"teammate": True, "actor": True, "keeper": False, "location": [60.0, 40.0]},
+                {"teammate": True, "actor": False, "keeper": False, "location": [58.0, 36.0]},
+                {"teammate": True, "actor": False, "keeper": False, "location": [64.0, 46.0]},
+                {"teammate": False, "actor": False, "keeper": False, "location": [70.0, 42.0]},
+                {"teammate": False, "actor": False, "keeper": False, "location": [72.0, 39.0]},
+            ],
+        },
+    ]
 
 
-def test_cli_parser_defaults_to_obpi_score() -> None:
-    args = build_parser().parse_args(["metrics.csv", "scored.csv"])
+class TestExtractUniquePlayers:
+    """Unit tests for player extraction helper."""
 
-    assert args.input.name == "metrics.csv"
-    assert args.output.name == "scored.csv"
-    assert args.score_column == "obpi"
-    assert args.membership_report is None
+    def test_extracts_sorted_ids(self) -> None:
+        events = _make_synthetic_events()
+        players = _extract_unique_players(events)
+        assert players == [1001, 1002]
+
+    def test_empty_events_returns_empty(self) -> None:
+        events = pd.DataFrame()
+        players = _extract_unique_players(events)
+        assert players == []
+
+
+class TestComputeAllMetrics:
+    """End-to-end pipeline tests with mocked loader."""
+
+    @patch("obpi.pipeline.StatsBombLoader")
+    def test_returns_expected_columns(self, mock_loader_cls: MagicMock) -> None:
+        mock_loader = MagicMock()
+        mock_loader.get_events.return_value = _make_synthetic_events()
+        mock_loader.get_freeze_frames.return_value = _make_synthetic_frames()
+        mock_loader_cls.return_value = mock_loader
+
+        xt_model = XTModel()
+        df = compute_all_metrics(match_id=999999, xt_model=xt_model)
+
+        expected_cols = [
+            "player_id",
+            "match_id",
+            "M1_SC",
+            "M2_OIRC",
+            "M3_BRPC",
+            "M4_OBR90",
+            "M5_RBTL",
+            "M6_RUP",
+            "M7_SCI",
+            "M8_LPC",
+            "M9_CBI",
+        ]
+        assert list(df.columns) == expected_cols
+        assert len(df) == 2  # Two unique players
+        assert df["match_id"].unique().tolist() == [999999]
+
+    @patch("obpi.pipeline.StatsBombLoader")
+    def test_all_values_finite(self, mock_loader_cls: MagicMock) -> None:
+        mock_loader = MagicMock()
+        mock_loader.get_events.return_value = _make_synthetic_events()
+        mock_loader.get_freeze_frames.return_value = _make_synthetic_frames()
+        mock_loader_cls.return_value = mock_loader
+
+        xt_model = XTModel()
+        df = compute_all_metrics(match_id=999999, xt_model=xt_model)
+
+        metric_cols = [c for c in df.columns if c.startswith("M")]
+        for col in metric_cols:
+            finite = df[col].apply(
+                lambda x: isinstance(x, (int, float)) and x == x
+            ).all()
+            assert finite, f"Column {col} contains non-finite values"
+
+    @patch("obpi.pipeline.StatsBombLoader")
+    def test_no_frames_sets_spatial_temporal_to_zero(self, mock_loader_cls: MagicMock) -> None:
+        mock_loader = MagicMock()
+        mock_loader.get_events.return_value = _make_synthetic_events()
+        mock_loader.get_freeze_frames.return_value = []
+        mock_loader_cls.return_value = mock_loader
+
+        xt_model = XTModel()
+        df = compute_all_metrics(match_id=999999, xt_model=xt_model)
+
+        assert (df["M7_SCI"] == 0.0).all()
+        assert (df["M1_SC"] == 0.0).all()
+        assert (df["M3_BRPC"] == 0.0).all()
+        assert (df["M9_CBI"] == 0.0).all()
+
+
+class TestRunPipeline:
+    """Tests for the caching wrapper."""
+
+    @patch("obpi.pipeline.StatsBombLoader")
+    def test_caches_to_parquet(self, mock_loader_cls: MagicMock, tmp_path: Path) -> None:
+        mock_loader = MagicMock()
+        mock_loader.get_events.return_value = _make_synthetic_events()
+        mock_loader.get_freeze_frames.return_value = _make_synthetic_frames()
+        mock_loader_cls.return_value = mock_loader
+
+        output_dir = tmp_path / "processed"
+        df = run_pipeline(match_id=999999, output_dir=str(output_dir))
+
+        assert len(df) == 2
+        cached = output_dir / "999999_metrics.parquet"
+        assert cached.exists()
+
+    @patch("obpi.pipeline.StatsBombLoader")
+    def test_reads_existing_cache(self, mock_loader_cls: MagicMock, tmp_path: Path) -> None:
+        output_dir = tmp_path / "processed"
+        output_dir.mkdir(parents=True)
+        cached = output_dir / "999999_metrics.parquet"
+        cached_df = pd.DataFrame(
+            {
+                "player_id": [1001],
+                "match_id": [999999],
+                "M1_SC": [0.5],
+                "M2_OIRC": [0.5],
+                "M3_BRPC": [0.5],
+                "M4_OBR90": [0.5],
+                "M5_RBTL": [0.5],
+                "M6_RUP": [0.5],
+                "M7_SCI": [0.5],
+                "M8_LPC": [0.5],
+                "M9_CBI": [0.5],
+                "_schema_version": [2],
+            }
+        )
+        cached_df.to_parquet(cached, index=False)
+
+        df = run_pipeline(match_id=999999, output_dir=str(output_dir))
+        assert len(df) == 1
+        assert df.iloc[0]["M1_SC"] == pytest.approx(0.5)
+
+
+class TestRunFuzzyPipeline:
+    """Tests for fuzzy aggregation as an additive downstream step."""
+
+    @patch("obpi.pipeline.StatsBombLoader")
+    def test_scores_existing_pipeline_metrics(
+        self, mock_loader_cls: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_loader = MagicMock()
+        mock_loader.get_events.return_value = _make_synthetic_events()
+        mock_loader.get_freeze_frames.return_value = _make_synthetic_frames()
+        mock_loader_cls.return_value = mock_loader
+
+        metrics_df = compute_all_metrics(match_id=999999, xt_model=XTModel())
+        output_path = tmp_path / "obpi_scores.parquet"
+
+        scored = run_fuzzy_pipeline(metrics_df, output_path=output_path)
+
+        assert output_path.exists()
+        assert "obpi" in scored.columns
+        assert scored["obpi"].between(0.0, 1.0).all()
+        assert "M1_SC" in scored.columns

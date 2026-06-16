@@ -18,7 +18,6 @@ def compute_shap(model: Any, x: pd.DataFrame) -> pd.DataFrame:
     SHAP is imported lazily so the rest of the validation suite can run even
     in environments that have not installed the optional explainability stack.
     """
-
     try:
         import shap
     except ModuleNotFoundError as exc:
@@ -37,7 +36,6 @@ def get_metric_weights(
     importance_values: pd.DataFrame | pd.Series | dict[str, float],
 ) -> dict[str, float]:
     """Normalize metric importances into weights that sum to 1.0."""
-
     if isinstance(importance_values, pd.DataFrame):
         importances = importance_values.abs().mean(axis=0)
     elif isinstance(importance_values, pd.Series):
@@ -62,7 +60,6 @@ def compute_permutation_importance(
     random_state: int = 42,
 ) -> pd.DataFrame:
     """Compute permutation importance for a fitted estimator."""
-
     result = permutation_importance(
         model,
         x,
@@ -82,7 +79,6 @@ def compute_permutation_importance(
 
 def save_metric_weights(weights: dict[str, float], output_path: str | Path) -> None:
     """Persist metric weights for dashboard/API consumption."""
-
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(weights, indent=2, sort_keys=True) + "\n")

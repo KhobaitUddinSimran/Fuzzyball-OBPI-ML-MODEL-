@@ -23,7 +23,6 @@ def run_ablation(
     `delta_accuracy` is defined as `full_accuracy - ablated_accuracy`; positive
     values mean removing the metric reduced validation accuracy.
     """
-
     metric_columns = metric_columns or METRIC_COLUMNS
     full_report = validation_fn(
         metrics_df,
@@ -69,7 +68,6 @@ def write_ablation_report(
     synthetic: bool = True,
 ) -> None:
     """Write a compact Markdown ablation report."""
-
     warning = ""
     if synthetic:
         warning = (

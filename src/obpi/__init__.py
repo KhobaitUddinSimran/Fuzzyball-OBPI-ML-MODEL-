@@ -1,6 +1,3 @@
-"""OBPI scoring and validation toolkit."""
-
-__all__ = ["__version__"]
+"""OBPI: Off-Ball Positional Intelligence engine."""
 
 __version__ = "0.1.0"
-

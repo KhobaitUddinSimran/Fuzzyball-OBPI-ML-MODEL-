@@ -14,7 +14,6 @@ def spearman_correlation(
     comparison_scores: pd.Series | np.ndarray,
 ) -> dict[str, float]:
     """Compute Spearman correlation and p-value."""
-
     aligned = pd.concat(
         [
             pd.Series(obpi_scores, name="obpi", dtype=float),
@@ -38,7 +37,6 @@ def compare_benchmarks(
     benchmarks: pd.DataFrame,
 ) -> pd.DataFrame:
     """Compare OBPI against each benchmark column with Spearman rho."""
-
     rows = []
     for column in benchmarks.columns:
         result = spearman_correlation(obpi_scores, benchmarks[column])
@@ -55,7 +53,6 @@ def orthogonal_variance_test(
     n_components: int | None = None,
 ) -> dict[str, object]:
     """Run PCA on OBPI plus benchmark scores."""
-
     clean = scores_df.dropna().astype(float)
     if clean.shape[0] < 3 or clean.shape[1] < 2:
         raise ValueError("PCA requires at least three rows and two score columns")
@@ -84,13 +81,11 @@ def expert_correlation(
     expert_median: pd.Series | np.ndarray,
 ) -> dict[str, float]:
     """Compute convergent validity against expert median ratings."""
-
     return spearman_correlation(obpi_scores, expert_median)
 
 
 def cronbach_alpha(expert_ratings_df: pd.DataFrame) -> float:
     """Compute Cronbach's alpha for expert rating columns."""
-
     ratings = expert_ratings_df.dropna().astype(float)
     if ratings.shape[1] < 2:
         raise ValueError("Cronbach alpha requires at least two raters")

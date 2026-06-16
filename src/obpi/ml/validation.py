@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import asdict, dataclass
 from typing import Any
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -37,7 +37,6 @@ class ValidationResult:
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation."""
-
         return asdict(self)
 
 
@@ -47,7 +46,6 @@ def create_labels(
     low_quantile: float = 0.25,
 ) -> pd.Series:
     """Label top quartile as 1, bottom quartile as 0, and discard the middle."""
-
     if not 0.0 < low_quantile < high_quantile < 1.0:
         raise ValueError("expected 0 < low_quantile < high_quantile < 1")
 
@@ -69,7 +67,6 @@ def prepare_labeled_data(
     score_column: str = "obpi",
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Return X/y after creating OBPI extreme-quartile labels."""
-
     metric_columns = metric_columns or METRIC_COLUMNS
     required_columns = set(metric_columns + [score_column])
     missing = required_columns - set(metrics_df.columns)
@@ -96,7 +93,6 @@ def train_svm(
     cv_splits: int = 5,
 ) -> GridSearchCV:
     """Train an RBF SVM with standard scaling and grid search."""
-
     pipeline = Pipeline(
         steps=[
             ("scaler", StandardScaler()),
@@ -119,7 +115,6 @@ def train_logistic(
     cv_splits: int = 5,
 ) -> GridSearchCV:
     """Train a scaled logistic-regression baseline."""
-
     pipeline = Pipeline(
         steps=[
             ("scaler", StandardScaler()),
@@ -139,10 +134,9 @@ def train_xgboost(
     cv_splits: int = 5,
 ) -> GridSearchCV:
     """Train XGBoost when the optional dependency is installed."""
-
     try:
         from xgboost import XGBClassifier
-    except ModuleNotFoundError as exc:
+    except Exception as exc:
         raise ImportError(
             "xgboost is required for train_xgboost(); install xgboost to run "
             "Week 6 XGBoost validation"
@@ -173,7 +167,6 @@ def evaluate_estimator(
     best_params: dict[str, Any] | None = None,
 ) -> ValidationResult:
     """Evaluate an estimator with stratified cross-validation."""
-
     cv = _make_cv(y, cv_splits)
     scoring = {
         "accuracy": "accuracy",
@@ -204,7 +197,6 @@ def evaluate_holdout_predictions(
     y_score: pd.Series | np.ndarray,
 ) -> dict[str, float]:
     """Evaluate already-generated predictions."""
-
     return {
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "roc_auc": float(roc_auc_score(y_true, y_score)),
@@ -220,7 +212,6 @@ def validate(
     include_xgboost: bool = False,
 ) -> dict[str, Any]:
     """Run no-leakage label construction and baseline model validation."""
-
     x, y = prepare_labeled_data(metrics_df, metric_columns, score_column)
     report: dict[str, Any] = {
         "n_samples": int(len(y)),
