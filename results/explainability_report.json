@@ -1,0 +1,30 @@
+{
+  "model_name": "svm",
+  "metric_weights": {
+    "M5": 0.5677655677655677,
+    "M6": 0.34065934065934145,
+    "M4": 0.09157509157509072,
+    "M1": 0.0,
+    "M2": 0.0,
+    "M3": 0.0,
+    "M7": 0.0,
+    "M8": 0.0,
+    "M9": 0.0
+  },
+  "permutation_importance_ranking": [
+    "M5",
+    "M6",
+    "M4",
+    "M1",
+    "M2",
+    "M3",
+    "M7",
+    "M8",
+    "M9"
+  ],
+  "shap_available": false,
+  "notes": [
+    "xgboost is required for train_xgboost(); install xgboost to run Week 6 XGBoost validation",
+    "SHAP skipped because XGBoost was not selected for explainability."
+  ]
+}

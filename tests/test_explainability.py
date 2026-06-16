@@ -8,11 +8,14 @@ import pytest
 
 from obpi.fuzzy.scoring import fit_fuzzy_engine, score_metrics_dataframe
 from obpi.ml.explainability import (
+    ExplainabilityResult,
     compute_permutation_importance,
     get_metric_weights,
+    run_explainability,
+    save_explainability_results,
     save_metric_weights,
 )
-from obpi.ml.validation import prepare_labeled_data, train_logistic
+from obpi.ml.validation import prepare_labeled_data, prepare_training_frame, train_logistic
 
 
 def test_get_metric_weights_normalizes_shap_dataframe() -> None:
@@ -82,6 +85,108 @@ def test_save_metric_weights_writes_json(tmp_path) -> None:
     save_metric_weights(weights, output_path)
 
     assert json.loads(output_path.read_text()) == weights
+
+
+def test_run_explainability_returns_ranked_artifacts() -> None:
+    metrics_df = _make_synthetic_scored_frame(80)
+    prepared = prepare_training_frame(metrics_df, cv_splits=4)
+
+    result = run_explainability(
+        prepared.prepared_df,
+        cv_splits=4,
+        prefer_model="logistic",
+        include_xgboost=False,
+        permutation_repeats=3,
+    )
+
+    assert isinstance(result, ExplainabilityResult)
+    assert result.model_name == "logistic"
+    assert result.shap_values is None
+    assert result.report["shap_available"] is False
+    assert set(result.metric_weights) == {f"M{i}" for i in range(1, 10)}
+    assert sum(result.metric_weights.values()) == pytest.approx(1.0)
+    assert list(result.permutation_importance.columns) == [
+        "metric",
+        "importance_mean",
+        "importance_std",
+    ]
+
+
+def test_save_explainability_results_writes_artifacts(tmp_path) -> None:
+    permutation_df = pd.DataFrame(
+        {
+            "metric": ["M1", "M2"],
+            "importance_mean": [0.2, 0.1],
+            "importance_std": [0.01, 0.02],
+        }
+    )
+    shap_df = pd.DataFrame({"M1": [0.1, -0.1], "M2": [0.05, -0.05]})
+    result = ExplainabilityResult(
+        model_name="xgboost",
+        metric_weights={"M1": 2 / 3, "M2": 1 / 3},
+        permutation_importance=permutation_df,
+        shap_values=shap_df,
+        report={"model_name": "xgboost", "shap_available": True},
+    )
+
+    weights_path = tmp_path / "metric_weights.json"
+    permutation_path = tmp_path / "permutation_importance.csv"
+    report_path = tmp_path / "explainability_report.json"
+    shap_path = tmp_path / "shap_values.csv"
+
+    save_explainability_results(
+        result,
+        weights_path=weights_path,
+        permutation_path=permutation_path,
+        report_path=report_path,
+        shap_path=shap_path,
+    )
+
+    assert json.loads(weights_path.read_text()) == {"M1": 2 / 3, "M2": 1 / 3}
+    assert pd.read_csv(permutation_path).shape == (2, 3)
+    assert json.loads(report_path.read_text())["model_name"] == "xgboost"
+    assert pd.read_csv(shap_path).shape == (2, 2)
+
+
+def test_run_explainability_supports_xgboost_path(monkeypatch) -> None:
+    metrics_df = _make_synthetic_scored_frame(80)
+    prepared = prepare_training_frame(metrics_df, cv_splits=4)
+
+    class DummyGrid:
+        best_estimator_ = object()
+
+    def fake_train_xgboost(x, y, cv_splits=5):
+        return DummyGrid()
+
+    def fake_compute_permutation_importance(*args, **kwargs):
+        return pd.DataFrame(
+            {
+                "metric": [f"M{i}" for i in range(1, 10)],
+                "importance_mean": np.linspace(0.9, 0.1, 9),
+                "importance_std": np.zeros(9),
+            }
+        )
+
+    def fake_compute_shap(model, x):
+        return pd.DataFrame(np.ones((len(x), x.shape[1])), columns=x.columns)
+
+    monkeypatch.setattr("obpi.ml.explainability.train_xgboost", fake_train_xgboost)
+    monkeypatch.setattr(
+        "obpi.ml.explainability.compute_permutation_importance",
+        fake_compute_permutation_importance,
+    )
+    monkeypatch.setattr("obpi.ml.explainability.compute_shap", fake_compute_shap)
+
+    result = run_explainability(
+        prepared.prepared_df,
+        cv_splits=4,
+        include_xgboost=True,
+        permutation_repeats=3,
+    )
+
+    assert result.model_name == "xgboost"
+    assert result.shap_values is not None
+    assert result.report["shap_available"] is True
 
 
 def _make_synthetic_scored_frame(n_rows: int) -> pd.DataFrame:

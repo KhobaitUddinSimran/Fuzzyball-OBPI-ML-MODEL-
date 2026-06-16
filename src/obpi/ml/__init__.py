@@ -11,9 +11,12 @@ from obpi.ml.correlation import (
     spearman_correlation,
 )
 from obpi.ml.explainability import (
+    ExplainabilityResult,
     compute_permutation_importance,
     compute_shap,
     get_metric_weights,
+    run_explainability,
+    save_explainability_results,
     save_metric_weights,
 )
 from obpi.ml.validation import (
@@ -37,6 +40,7 @@ from obpi.ml.validation import (
 
 __all__ = [
     "METRIC_COLUMNS",
+    "ExplainabilityResult",
     "TrainingPreparationResult",
     "ValidationResult",
     "compute_permutation_importance",
@@ -53,6 +57,8 @@ __all__ = [
     "expert_correlation",
     "orthogonal_variance_test",
     "run_ablation",
+    "run_explainability",
+    "save_explainability_results",
     "save_training_preparation",
     "save_metric_weights",
     "save_validation_results",
