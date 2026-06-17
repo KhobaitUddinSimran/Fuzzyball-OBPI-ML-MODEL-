@@ -3,6 +3,8 @@
 
 An advanced sports data science framework that uses **StatsBomb 360 Freeze-Frame Data**, **Mamdani Fuzzy Inference Systems (FIS)**, and **Support Vector Machines (SVM)** to mathematically grade space creation, temporal control (*La Pausa*), and positioning in elite attacking midfielders.
 
+Final write-up: [FINAL_PROJECT_REPORT.md](FINAL_PROJECT_REPORT.md)
+
 ---
 
 ## 🏗️ 1. Pipeline Architecture
@@ -88,7 +90,7 @@ To pull every men's senior competition listed in the official open-data index,
 including competition metadata plus all linked match, event, and lineup files:
 
 ```bash
-python scripts/download_statsbomb_mens_open_data.py --skip-existing
+python scripts/download_statsbomb_mens_open_data.py --skip-existing --include-360
 ```
 
 By default, files are stored in:
@@ -99,6 +101,7 @@ data/raw/statsbomb_open_data/
   matches/
   events/
   lineups/
+  three-sixty/
 ```
 
 Use `--output-dir` if you want to place the dataset somewhere else.
@@ -121,6 +124,26 @@ data/interim/
   player_matches.parquet
   events_manifest.parquet
   events_by_match/
+```
+
+If `data/raw/statsbomb_open_data/three-sixty/` is present, the preprocessor
+automatically merges standalone StatsBomb 360 frames into the per-match event
+parquet files and records coverage in `events_manifest.parquet`.
+
+To compute metrics only for matches with 360 coverage:
+
+```bash
+python3 scripts/process_interim_metrics.py --require-360
+```
+
+For the attacking-midfielder validation subset used by the current research
+pipeline, use the 360 subset with a bounded, evenly sampled frame list:
+
+```bash
+python3 scripts/process_interim_metrics.py \
+  --require-360 \
+  --position-keyword "Attacking Midfield" \
+  --max-frames-per-match 25
 ```
 
 ### Running the pipeline

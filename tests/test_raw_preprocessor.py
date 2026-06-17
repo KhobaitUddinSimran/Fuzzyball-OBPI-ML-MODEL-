@@ -130,6 +130,19 @@ def test_preprocess_all_creates_expected_outputs(tmp_path: Path) -> None:
             }
         ],
     )
+    _write_json(
+        raw_dir / "three-sixty" / "1234.json",
+        [
+            {
+                "event_uuid": "evt-1",
+                "visible_area": [0, 0, 120, 80],
+                "freeze_frame": [
+                    {"teammate": True, "location": [60.0, 40.0]},
+                    {"teammate": False, "location": [63.0, 41.0]},
+                ],
+            }
+        ],
+    )
 
     preprocessor = StatsBombOpenDataPreprocessor(raw_dir=raw_dir, output_dir=output_dir)
     outputs = preprocessor.preprocess_all()
@@ -155,5 +168,10 @@ def test_preprocess_all_creates_expected_outputs(tmp_path: Path) -> None:
     assert matches.iloc[0]["match_id"] == 1234
     assert player_matches.iloc[0]["player_id"] == 99
     assert event_manifest.iloc[0]["event_count"] == 1
+    assert bool(event_manifest.iloc[0]["has_three_sixty_file"]) is True
+    assert event_manifest.iloc[0]["freeze_frame_event_count"] == 1
     assert events.iloc[0]["type_name"] == "Pass"
     assert events.iloc[0]["pass_recipient_name"] == "Player Two"
+    assert bool(events.iloc[0]["has_freeze_frame"]) is True
+    assert bool(events.iloc[0]["has_visible_area"]) is True
+    assert "63.0" in events.iloc[0]["freeze_frame_json"]

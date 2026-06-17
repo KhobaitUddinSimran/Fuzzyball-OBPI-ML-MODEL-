@@ -71,9 +71,14 @@ def compute_lpc(
         return 0.0
 
     df = events.copy()
-    df["is_receipt"] = df.apply(_is_receipt, axis=1)
-    df["is_pass"] = df.apply(_is_pass, axis=1)
-    df["player_id"] = df.apply(_get_player_id, axis=1)
+    if {"type_name", "player_id"}.issubset(df.columns):
+        df["is_receipt"] = df["type_name"].isin(_BALL_RECEIPT_NAMES)
+        df["is_pass"] = df["type_name"].isin(_PASS_NAMES)
+        df["player_id"] = pd.to_numeric(df["player_id"], errors="coerce")
+    else:
+        df["is_receipt"] = df.apply(_is_receipt, axis=1)
+        df["is_pass"] = df.apply(_is_pass, axis=1)
+        df["player_id"] = df.apply(_get_player_id, axis=1)
     df["time_sec"] = df["timestamp"].apply(_parse_ts)
     df["period_offset"] = df["period"].apply(lambda p: 0 if p == 1 else 45 * 60)
     df["time_sec"] = df["time_sec"] + df["period_offset"]
@@ -150,8 +155,12 @@ def compute_cbi(
         return 0.0
 
     df = events.copy()
-    df["is_receipt"] = df.apply(_is_receipt, axis=1)
-    df["player_id"] = df.apply(_get_player_id, axis=1)
+    if {"type_name", "player_id"}.issubset(df.columns):
+        df["is_receipt"] = df["type_name"].isin({"Ball Receipt*", "Ball Receipt"})
+        df["player_id"] = pd.to_numeric(df["player_id"], errors="coerce")
+    else:
+        df["is_receipt"] = df.apply(_is_receipt, axis=1)
+        df["player_id"] = df.apply(_get_player_id, axis=1)
 
     receipts = df[(df["is_receipt"]) & (df["player_id"] == player_id)]
     if receipts.empty:
@@ -159,6 +168,10 @@ def compute_cbi(
 
     count = 0
     opportunities = 0
+    player_locations = df[
+        (df["player_id"] == player_id) & df["location"].apply(lambda loc: loc is not None)
+    ]["location"]
+    row_positions = {index: position for position, index in enumerate(df.index)}
 
     for i, (_, row) in enumerate(receipts.iterrows()):
         opportunities += 1
@@ -167,10 +180,10 @@ def compute_cbi(
             continue
 
         # Ball-to-player vector: from previous event location (pass origin) to receipt
-        prev_events = df[df.index < row.name]
-        if prev_events.empty:
+        row_position = row_positions.get(row.name, 0)
+        if row_position == 0:
             continue
-        prev = prev_events.iloc[-1]
+        prev = df.iloc[row_position - 1]
         ball_loc = prev.get("location")
         if ball_loc is None:
             continue
@@ -180,16 +193,10 @@ def compute_cbi(
         )
 
         # Run vector: receiver's own previous location → receipt location
-        receiver_prev = prev_events[prev_events.apply(
-            lambda r, pid=player_id: (
-                _get_player_id(r) == pid
-                and r.get("location") is not None
-            ),
-            axis=1,
-        )]
+        receiver_prev = player_locations[player_locations.index < row.name]
         if receiver_prev.empty:
             continue
-        run_origin = receiver_prev.iloc[-1].get("location")
+        run_origin = receiver_prev.iloc[-1]
         if run_origin is None:
             continue
         run_vec = np.array(

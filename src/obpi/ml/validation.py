@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import warnings
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -40,12 +42,20 @@ class ValidationResult:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class TrainingPreparationResult:
+    """Prepared extreme-quartile dataset plus reusable metadata."""
+
+    prepared_df: pd.DataFrame
+    metadata: dict[str, Any]
+
+
 def create_labels(
     obpi_scores: pd.Series,
     high_quantile: float = 0.75,
     low_quantile: float = 0.25,
 ) -> pd.Series:
-    """Label top quartile as 1, bottom quartile as 0, and discard the middle."""
+    """Label exact top/bottom quantile slices and discard the middle."""
     if not 0.0 < low_quantile < high_quantile < 1.0:
         raise ValueError("expected 0 < low_quantile < high_quantile < 1")
 
@@ -53,12 +63,24 @@ def create_labels(
     if scores.empty:
         raise ValueError("obpi_scores must contain at least one non-null score")
 
-    low_cutoff = scores.quantile(low_quantile)
-    high_cutoff = scores.quantile(high_quantile)
+    n_rows = len(scores)
+    n_low = max(1, int(np.floor(n_rows * low_quantile)))
+    n_high = max(1, int(np.floor(n_rows * (1.0 - high_quantile))))
+    if n_low + n_high > n_rows:
+        raise ValueError("quantile selection leaves no middle rows")
+
+    sorted_scores = scores.sort_values(kind="mergesort")
+    low_indices = sorted_scores.head(n_low).index
+    high_indices = sorted_scores.tail(n_high).index
+
+    overlap = set(low_indices) & set(high_indices)
+    if overlap:
+        raise ValueError("quantile selection produced overlapping label sets")
+
     labels = pd.Series(np.nan, index=scores.index, dtype="float64")
-    labels.loc[scores <= low_cutoff] = 0
-    labels.loc[scores >= high_cutoff] = 1
-    return labels.dropna().astype(int)
+    labels.loc[low_indices] = 0
+    labels.loc[high_indices] = 1
+    return labels.dropna().astype(int).sort_index()
 
 
 def prepare_labeled_data(
@@ -83,6 +105,104 @@ def prepare_labeled_data(
     labels = create_labels(metrics_df[score_column])
     x = metric_values.loc[labels.index]
     y = labels
+    _validate_class_balance(y)
+    return x, y
+
+
+def prepare_training_frame(
+    metrics_df: pd.DataFrame,
+    metric_columns: list[str] | None = None,
+    score_column: str = "obpi",
+    cv_splits: int = 5,
+    id_columns: list[str] | None = None,
+) -> TrainingPreparationResult:
+    """Create an ML-ready extreme-quartile dataset with scaled features and CV folds."""
+    metric_columns = metric_columns or METRIC_COLUMNS
+    id_columns = id_columns or [
+        column
+        for column in metrics_df.columns
+        if column not in set(metric_columns + [score_column])
+    ]
+
+    x, y = prepare_labeled_data(
+        metrics_df,
+        metric_columns=metric_columns,
+        score_column=score_column,
+    )
+    cv = _make_cv(y, cv_splits)
+
+    scaler = StandardScaler()
+    x_scaled = scaler.fit_transform(x)
+    scaled_columns = [f"{column}_scaled" for column in metric_columns]
+    prepared_df = metrics_df.loc[y.index, id_columns + metric_columns + [score_column]].copy()
+    prepared_df["label"] = y.to_numpy()
+    for idx, _column in enumerate(metric_columns):
+        prepared_df[scaled_columns[idx]] = x_scaled[:, idx]
+
+    folds = []
+    for fold_idx, (_, test_idx) in enumerate(cv.split(x, y), start=1):
+        fold_indices = y.iloc[test_idx].index.tolist()
+        folds.append({"fold": fold_idx, "test_indices": fold_indices})
+
+    metadata = {
+        "metric_columns": metric_columns,
+        "scaled_metric_columns": scaled_columns,
+        "score_column": score_column,
+        "class_counts": {
+            str(label): int(count)
+            for label, count in y.value_counts().sort_index().items()
+        },
+        "n_rows_input": int(len(metrics_df)),
+        "n_rows_prepared": int(len(prepared_df)),
+        "n_splits": cv.get_n_splits(),
+        "folds": folds,
+        "scaler": {
+            "mean": {
+                column: float(scaler.mean_[idx])
+                for idx, column in enumerate(metric_columns)
+            },
+            "scale": {
+                column: float(scaler.scale_[idx])
+                for idx, column in enumerate(metric_columns)
+            },
+        },
+    }
+    return TrainingPreparationResult(
+        prepared_df=prepared_df.reset_index(drop=False),
+        metadata=metadata,
+    )
+
+
+def save_training_preparation(
+    result: TrainingPreparationResult,
+    output_path: str | Path,
+    metadata_path: str | Path,
+) -> None:
+    """Persist the prepared training frame and metadata to disk."""
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    result.prepared_df.to_parquet(output, index=False)
+
+    metadata_output = Path(metadata_path)
+    metadata_output.parent.mkdir(parents=True, exist_ok=True)
+    metadata_output.write_text(json.dumps(result.metadata, indent=2), encoding="utf-8")
+
+
+def extract_prepared_xy(
+    prepared_df: pd.DataFrame,
+    metric_columns: list[str] | None = None,
+    label_column: str = "label",
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Extract features and labels from a training-prepared parquet frame."""
+    metric_columns = metric_columns or METRIC_COLUMNS
+    required = set(metric_columns + [label_column])
+    missing = required - set(prepared_df.columns)
+    if missing:
+        missing_text = ", ".join(sorted(missing))
+        raise ValueError(f"prepared_df is missing required columns: {missing_text}")
+
+    x = prepared_df.loc[:, metric_columns].astype(float)
+    y = prepared_df.loc[:, label_column].astype(int)
     _validate_class_balance(y)
     return x, y
 
@@ -254,6 +374,106 @@ def validate(
             ).to_dict()
 
     return report
+
+
+def validate_prepared_data(
+    prepared_df: pd.DataFrame,
+    metric_columns: list[str] | None = None,
+    label_column: str = "label",
+    cv_splits: int = 5,
+    include_xgboost: bool = False,
+) -> dict[str, Any]:
+    """Train and evaluate validation models from a pre-labeled prepared frame."""
+    x, y = extract_prepared_xy(
+        prepared_df,
+        metric_columns=metric_columns,
+        label_column=label_column,
+    )
+    report: dict[str, Any] = {
+        "n_samples": int(len(y)),
+        "n_rows": int(len(prepared_df)),
+        "class_counts": {
+            str(label): int(count)
+            for label, count in y.value_counts().sort_index().items()
+        },
+        "models": {},
+        "notes": [],
+    }
+
+    models = {
+        "logistic": train_logistic(x, y, cv_splits=cv_splits),
+        "svm": train_svm(x, y, cv_splits=cv_splits),
+    }
+    for model_name, grid in models.items():
+        report["models"][model_name] = evaluate_estimator(
+            grid.best_estimator_,
+            x,
+            y,
+            model_name,
+            cv_splits=cv_splits,
+            best_params=dict(grid.best_params_),
+        ).to_dict()
+
+    if include_xgboost:
+        try:
+            xgb_grid = train_xgboost(x, y, cv_splits=cv_splits)
+        except ImportError as exc:
+            report["notes"].append(str(exc))
+        else:
+            report["models"]["xgboost"] = evaluate_estimator(
+                xgb_grid.best_estimator_,
+                x,
+                y,
+                "xgboost",
+                cv_splits=cv_splits,
+                best_params=dict(xgb_grid.best_params_),
+            ).to_dict()
+
+    return report
+
+
+def save_validation_results(
+    report: dict[str, Any],
+    output_path: str | Path,
+    markdown_path: str | Path | None = None,
+) -> None:
+    """Persist model-validation results as JSON and optional Markdown."""
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+    if markdown_path is None:
+        return
+
+    markdown_lines = [
+        "# Validation Report",
+        "",
+        f"- Samples: {report['n_samples']}",
+        f"- Input rows: {report['n_rows']}",
+        f"- Class counts: {report['class_counts']}",
+        "",
+        "## Models",
+        "",
+    ]
+    for model_name, metrics in report["models"].items():
+        markdown_lines.extend(
+            [
+                f"### {model_name}",
+                "",
+                f"- Accuracy mean: {metrics['accuracy_mean']:.4f}",
+                f"- ROC-AUC mean: {metrics['roc_auc_mean']:.4f}",
+                f"- Recall@Class1 mean: {metrics['recall_class_1_mean']:.4f}",
+                f"- Best params: {metrics.get('best_params')}",
+                "",
+            ]
+        )
+    if report.get("notes"):
+        markdown_lines.extend(["## Notes", ""])
+        markdown_lines.extend([f"- {note}" for note in report["notes"]])
+
+    markdown_output = Path(markdown_path)
+    markdown_output.parent.mkdir(parents=True, exist_ok=True)
+    markdown_output.write_text("\n".join(markdown_lines) + "\n", encoding="utf-8")
 
 
 def _make_cv(y: pd.Series, cv_splits: int) -> StratifiedKFold:

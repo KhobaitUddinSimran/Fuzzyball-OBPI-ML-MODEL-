@@ -21,6 +21,11 @@ _SET_PIECE_PATTERNS = {
 
 def _exclude_set_pieces(events: pd.DataFrame) -> pd.DataFrame:
     """Drop events that occur during set-piece phases."""
+    if "play_pattern_name" in events.columns:
+        return events[
+            ~events["play_pattern_name"].isin(_SET_PIECE_PATTERNS)
+        ].reset_index(drop=True)
+
     def _is_set_piece(pattern: Any) -> bool:
         if isinstance(pattern, dict):
             return pattern.get("name", "") in _SET_PIECE_PATTERNS
@@ -52,6 +57,7 @@ def compute_obr90(
     v_threshold: float = 2.5,
     duration_threshold: float = 0.4,
     max_dt: float = 1.5,
+    exclude_set_pieces: bool = True,
 ) -> float:
     """Compute Off-Ball Runs per 90 minutes (M4).
 
@@ -67,12 +73,13 @@ def compute_obr90(
         v_threshold: Minimum speed (m/s) for a fast step.
         duration_threshold: Minimum run duration (s).
         max_dt: Maximum reliable inter-event gap for velocity inference.
+        exclude_set_pieces: Whether to remove set-piece phases before analysis.
 
     Returns:
         OBR90 value. Returns ``0.0`` if no runs detected or minutes played
         is zero.
     """
-    events_clean = _exclude_set_pieces(events)
+    events_clean = _exclude_set_pieces(events) if exclude_set_pieces else events
     vel_df = kinematics.infer_velocity(events_clean, player_id, max_dt=max_dt)
     runs = kinematics.detect_runs(vel_df, v_threshold, duration_threshold)
 
@@ -94,6 +101,7 @@ def compute_oirc(
     v_threshold: float = 2.5,
     duration_threshold: float = 0.4,
     max_dt: float = 1.5,
+    exclude_set_pieces: bool = True,
 ) -> float:
     """Compute Off-Ball Impact Run Coefficient (M2).
 
@@ -108,11 +116,12 @@ def compute_oirc(
         v_threshold: Minimum speed (m/s) for a fast step.
         duration_threshold: Minimum run duration (s).
         max_dt: Maximum reliable inter-event gap for velocity inference.
+        exclude_set_pieces: Whether to remove set-piece phases before analysis.
 
     Returns:
         OIRC value. Returns ``0.0`` if no runs detected.
     """
-    events_clean = _exclude_set_pieces(events)
+    events_clean = _exclude_set_pieces(events) if exclude_set_pieces else events
     vel_df = kinematics.infer_velocity(events_clean, player_id, max_dt=max_dt)
     runs = kinematics.detect_runs(vel_df, v_threshold, duration_threshold)
 

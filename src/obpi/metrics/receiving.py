@@ -24,6 +24,12 @@ def get_receipt_events(events: pd.DataFrame, player_id: int) -> pd.DataFrame:
         Subset of ``events`` where the event type is a ball receipt and the
         player matches ``player_id``.
     """
+    if {"type_name", "player_id"}.issubset(events.columns):
+        player_ids = pd.to_numeric(events["player_id"], errors="coerce")
+        receipts = events[
+            events["type_name"].isin(_BALL_RECEIPT_NAMES) & (player_ids == player_id)
+        ]
+        return receipts.reset_index(drop=True)
 
     def _is_receipt(row: pd.Series) -> bool:
         ev_type = row.get("type", {})
