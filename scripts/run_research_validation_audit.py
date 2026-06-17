@@ -61,6 +61,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional SHAP values CSV.",
     )
     parser.add_argument(
+        "--sensitivity-report",
+        type=Path,
+        default=Path("results/frame_cap_sensitivity.json"),
+        help="Optional frame-cap sensitivity JSON report.",
+    )
+    parser.add_argument(
+        "--external-report",
+        type=Path,
+        default=Path("results/external_validation.json"),
+        help="Optional external/expert validation JSON report.",
+    )
+    parser.add_argument(
+        "--aggregate-report",
+        type=Path,
+        default=Path("results/match_vs_aggregate_validation.json"),
+        help="Optional match-vs-aggregate validation JSON report.",
+    )
+    parser.add_argument(
         "--output-json",
         type=Path,
         default=Path("results/research_validation_audit.json"),
@@ -96,6 +114,21 @@ def main() -> int:
         pd.read_parquet(args.manifest_path) if args.manifest_path.exists() else None
     )
     shap_values = pd.read_csv(args.shap_path) if args.shap_path.exists() else None
+    sensitivity_report = (
+        json.loads(args.sensitivity_report.read_text(encoding="utf-8"))
+        if args.sensitivity_report.exists()
+        else None
+    )
+    external_report = (
+        json.loads(args.external_report.read_text(encoding="utf-8"))
+        if args.external_report.exists()
+        else None
+    )
+    aggregate_report = (
+        json.loads(args.aggregate_report.read_text(encoding="utf-8"))
+        if args.aggregate_report.exists()
+        else None
+    )
 
     audit = build_validation_audit(
         metrics_df=metrics_df,
@@ -105,6 +138,9 @@ def main() -> int:
         explainability_report=explainability_report,
         manifest_df=manifest_df,
         shap_values=shap_values,
+        sensitivity_report=sensitivity_report,
+        external_report=external_report,
+        aggregate_report=aggregate_report,
     )
     save_validation_audit(
         audit,

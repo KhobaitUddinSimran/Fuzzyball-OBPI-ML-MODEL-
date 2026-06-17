@@ -47,13 +47,32 @@
 
 - pipeline_validation: complete
 - construct_validation: internal_obpi_extreme_quartile_only
+- robustness_validation: complete
 - external_validation: pending_external_or_expert_labels
-- interpretation: Use current scores as 360-enriched internal validation evidence. Do not present them as final independent convergent validity yet.
+- interpretation: Use current scores as 360-enriched internal validation evidence. Do not present them as final independent convergent validity unless external_validation is complete.
+
+## Robustness Validation
+
+- status: complete
+- xgboost_accuracy_range: 6.734006734010478e-05
+- cap 25: rows=549, samples=274, xgboost_accuracy=0.9927272727272728
+- cap 50: rows=549, samples=274, xgboost_accuracy=0.9926599326599327
+- cap 75: rows=549, samples=274, xgboost_accuracy=0.9927272727272728
+
+## External Validation
+
+- status: pending_external_or_expert_labels
+- template_output: results/expert_ratings_template.csv
+
+## Match vs Aggregate Validation
+
+- match_level_best_model: xgboost
+- match_level_samples: 274
+- aggregate_level_best_model: logistic
+- aggregate_level_samples: 126
 
 ## Next Validation Requirements
 
 - Collect independent player-quality labels or expert ratings.
 - Run Spearman correlation between OBPI and external/expert ratings.
 - Compute inter-rater reliability if expert-panel ratings are used.
-- Repeat the 360 frame-cap sensitivity run at 25, 50, and 75 frames per match.
-- Compare match-level and aggregate player-level validation results.

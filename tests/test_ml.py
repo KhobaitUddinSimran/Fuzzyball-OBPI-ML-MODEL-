@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import builtins
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -70,8 +72,18 @@ def test_validate_returns_model_metrics() -> None:
     assert result["models"]["svm"]["accuracy_mean"] >= 0.5
 
 
-def test_train_xgboost_reports_missing_optional_dependency() -> None:
+def test_train_xgboost_reports_missing_optional_dependency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     x, y = prepare_labeled_data(_make_synthetic_scored_frame(40))
+    real_import = builtins.__import__
+
+    def fake_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "xgboost":
+            raise ImportError("No module named xgboost")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
 
     with pytest.raises(ImportError, match="xgboost is required"):
         train_xgboost(x, y, cv_splits=2)

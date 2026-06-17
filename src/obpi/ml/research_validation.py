@@ -19,8 +19,18 @@ def build_validation_audit(
     explainability_report: dict[str, Any],
     manifest_df: pd.DataFrame | None = None,
     shap_values: pd.DataFrame | None = None,
+    sensitivity_report: dict[str, Any] | None = None,
+    external_report: dict[str, Any] | None = None,
+    aggregate_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a compact research-validity audit from pipeline artifacts."""
+    validity_status = _validity_status(
+        metrics_df,
+        cv_report,
+        explainability_report,
+        sensitivity_report,
+        external_report,
+    )
     return {
         "data_coverage": _data_coverage(metrics_df, manifest_df),
         "target_population": _target_population(metrics_df),
@@ -29,14 +39,11 @@ def build_validation_audit(
         "metric_variation": _metric_variation(scored_df),
         "model_validation": _model_validation(cv_report),
         "explainability": _explainability(explainability_report, shap_values),
-        "validity_status": _validity_status(metrics_df, cv_report, explainability_report),
-        "next_validation_requirements": [
-            "Collect independent player-quality labels or expert ratings.",
-            "Run Spearman correlation between OBPI and external/expert ratings.",
-            "Compute inter-rater reliability if expert-panel ratings are used.",
-            "Repeat the 360 frame-cap sensitivity run at 25, 50, and 75 frames per match.",
-            "Compare match-level and aggregate player-level validation results.",
-        ],
+        "robustness_validation": _robustness_validation(sensitivity_report),
+        "aggregate_validation": aggregate_report,
+        "external_validation_report": external_report,
+        "validity_status": validity_status,
+        "next_validation_requirements": _next_validation_requirements(validity_status),
     }
 
 
@@ -188,6 +195,8 @@ def _validity_status(
     metrics_df: pd.DataFrame,
     cv_report: dict[str, Any],
     explainability_report: dict[str, Any],
+    sensitivity_report: dict[str, Any] | None = None,
+    external_report: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     all_rows_360 = (
         "has_360_data" in metrics_df
@@ -196,17 +205,81 @@ def _validity_status(
     )
     has_xgboost = "xgboost" in cv_report.get("models", {})
     has_shap = bool(explainability_report.get("shap_available", False))
+    has_sensitivity = bool(sensitivity_report and sensitivity_report.get("caps"))
+    external_status = (
+        str(external_report.get("status"))
+        if external_report is not None
+        else "pending_external_or_expert_labels"
+    )
     return {
         "pipeline_validation": "complete"
         if all_rows_360 and has_xgboost and has_shap
         else "partial",
         "construct_validation": "internal_obpi_extreme_quartile_only",
-        "external_validation": "pending_external_or_expert_labels",
+        "robustness_validation": "complete" if has_sensitivity else "pending",
+        "external_validation": external_status,
         "interpretation": (
             "Use current scores as 360-enriched internal validation evidence. "
-            "Do not present them as final independent convergent validity yet."
+            "Do not present them as final independent convergent validity unless "
+            "external_validation is complete."
         ),
     }
+
+
+def _robustness_validation(
+    sensitivity_report: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not sensitivity_report or not sensitivity_report.get("caps"):
+        return None
+
+    caps = sensitivity_report["caps"]
+    rows = []
+    for cap_report in caps:
+        rows.append(
+            {
+                "frame_cap": int(cap_report["frame_cap"]),
+                "player_match_rows": int(cap_report["player_match_rows"]),
+                "prepared_rows": int(cap_report["prepared_rows"]),
+                "xgboost_accuracy_mean": _maybe_float(
+                    cap_report.get("xgboost_accuracy_mean")
+                ),
+                "svm_accuracy_mean": _maybe_float(cap_report.get("svm_accuracy_mean")),
+                "logistic_accuracy_mean": _maybe_float(
+                    cap_report.get("logistic_accuracy_mean")
+                ),
+            }
+        )
+    xgb_values = [
+        row["xgboost_accuracy_mean"]
+        for row in rows
+        if row["xgboost_accuracy_mean"] is not None
+    ]
+    return {
+        "status": "complete",
+        "caps": rows,
+        "xgboost_accuracy_range": (
+            float(max(xgb_values) - min(xgb_values)) if xgb_values else None
+        ),
+    }
+
+
+def _next_validation_requirements(validity_status: dict[str, str]) -> list[str]:
+    requirements: list[str] = []
+    if validity_status["external_validation"] != "complete":
+        requirements.extend(
+            [
+                "Collect independent player-quality labels or expert ratings.",
+                "Run Spearman correlation between OBPI and external/expert ratings.",
+                "Compute inter-rater reliability if expert-panel ratings are used.",
+            ]
+        )
+    return requirements
+
+
+def _maybe_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    return float(value)
 
 
 def _optional_float(df: pd.DataFrame, column: str, method: str) -> float | None:
@@ -256,6 +329,59 @@ def _audit_markdown(audit: dict[str, Any]) -> str:
     lines.extend(["", "## Validity Status", ""])
     for key, value in audit["validity_status"].items():
         lines.append(f"- {key}: {value}")
+
+    lines.extend(["", "## Robustness Validation", ""])
+    robustness = audit.get("robustness_validation")
+    if robustness is None:
+        lines.append("- status: pending")
+    else:
+        lines.append(f"- status: {robustness['status']}")
+        lines.append(
+            f"- xgboost_accuracy_range: {robustness['xgboost_accuracy_range']}"
+        )
+        for cap_report in robustness["caps"]:
+            lines.append(
+                "- cap {frame_cap}: rows={player_match_rows}, samples={prepared_rows}, "
+                "xgboost_accuracy={xgboost_accuracy_mean}".format(**cap_report)
+            )
+
+    lines.extend(["", "## External Validation", ""])
+    external = audit.get("external_validation_report")
+    if external is None:
+        lines.append("- status: pending_external_or_expert_labels")
+    else:
+        lines.append(f"- status: {external['status']}")
+        if "template_output" in external:
+            lines.append(f"- template_output: {external['template_output']}")
+        if "expert_validation" in external:
+            lines.append(f"- expert_validation: {external['expert_validation']}")
+        if "inter_rater_reliability" in external:
+            lines.append(
+                f"- inter_rater_reliability: {external['inter_rater_reliability']}"
+            )
+
+    lines.extend(["", "## Match vs Aggregate Validation", ""])
+    aggregate = audit.get("aggregate_validation")
+    if aggregate is None:
+        lines.append("- status: pending")
+    else:
+        match_level = aggregate["match_level"]
+        aggregate_level = aggregate["aggregate_player_level"]
+        lines.append(
+            f"- match_level_best_model: {match_level['best_accuracy_model']}"
+        )
+        lines.append(
+            "- match_level_samples: "
+            f"{match_level['n_samples']}"
+        )
+        lines.append(
+            "- aggregate_level_best_model: "
+            f"{aggregate_level['best_accuracy_model']}"
+        )
+        lines.append(
+            "- aggregate_level_samples: "
+            f"{aggregate_level['n_samples']}"
+        )
 
     lines.extend(["", "## Next Validation Requirements", ""])
     for item in audit["next_validation_requirements"]:
