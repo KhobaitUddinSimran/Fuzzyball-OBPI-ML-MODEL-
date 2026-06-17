@@ -1,0 +1,20 @@
+{
+  "status": "pending_sofascore_ratings",
+  "source": "SofaScore",
+  "access_probe": {
+    "status": "http_error",
+    "url": "https://www.sofascore.com/api/v1/search/all?q=Lionel+Messi&page=0",
+    "http_status": 403,
+    "body": "{\"error\": {\"code\": 403, \"reason\": \"Forbidden\" }}"
+  },
+  "reason": "No local SofaScore ratings CSV is available, and the public SofaScore web API probe did not return usable rating data.",
+  "ratings_path_expected": "data/external/sofascore_ratings.csv",
+  "template_output": "data/external/sofascore_ratings_template.csv",
+  "template_rows": 100,
+  "required_columns": [
+    "player_id",
+    "player_name",
+    "sofascore_rating"
+  ],
+  "next_step": "Fill the template with SofaScore ratings from an allowed export or manual collection, save it as data/external/sofascore_ratings.csv, then rerun this script."
+}
