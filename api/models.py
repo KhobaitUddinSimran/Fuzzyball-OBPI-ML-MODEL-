@@ -10,15 +10,15 @@ from pydantic import BaseModel, Field
 class MetricBreakdown(BaseModel):
     """M1–M9 metric values for a single player."""
 
-    M1_SC: float = Field(..., ge=0.0, le=1.0, description="Screening Coefficient")
-    M2_OIRC: float = Field(..., ge=0.0, le=1.0, description="Off-Ball Impact Run Coefficient")
-    M3_BRPC: float = Field(..., ge=0.0, le=1.0, description="Best Receiving Position Coefficient")
-    M4_OBR90: float = Field(..., ge=0.0, le=1.0, description="Off-Ball Runs per 90")
-    M5_RBTL: float = Field(..., ge=0.0, le=1.0, description="Receipts Between the Lines")
-    M6_RUP: float = Field(..., ge=0.0, le=1.0, description="Receipts Under Pressure")
-    M7_SCI: float = Field(..., ge=0.0, le=1.0, description="Space Creation Index")
-    M8_LPC: float = Field(..., ge=0.0, le=1.0, description="La Pausa Coefficient")
-    M9_CBI: float = Field(..., ge=0.0, le=1.0, description="Call-for-Ball Index")
+    M1_SC: float = Field(..., ge=0.0, description="Screening Coefficient")
+    M2_OIRC: float = Field(..., ge=0.0, description="Off-Ball Impact Run Coefficient")
+    M3_BRPC: float = Field(..., ge=0.0, description="Best Receiving Position Coefficient")
+    M4_OBR90: float = Field(..., ge=0.0, description="Off-Ball Runs per 90")
+    M5_RBTL: float = Field(..., ge=0.0, description="Receipts Between the Lines")
+    M6_RUP: float = Field(..., ge=0.0, description="Receipts Under Pressure")
+    M7_SCI: float = Field(..., ge=0.0, description="Space Creation Index")
+    M8_LPC: float = Field(..., ge=0.0, description="La Pausa Coefficient")
+    M9_CBI: float = Field(..., ge=0.0, description="Call-for-Ball Index")
 
 
 class ShapBreakdown(BaseModel):

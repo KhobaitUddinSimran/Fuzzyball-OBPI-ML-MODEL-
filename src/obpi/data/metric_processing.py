@@ -374,11 +374,14 @@ class InterimMetricsProcessor:
 
     def _average_location(self, events: pd.DataFrame, player_id: int) -> list[float] | None:
         """Estimate a player's average event location within a match."""
-        player_events = events[
-            events["player"].apply(
-                lambda player: player.get("id") == player_id if isinstance(player, dict) else False
-            )
-        ]
+        if "player_id" in events.columns:
+            player_events = events[pd.to_numeric(events["player_id"], errors="coerce") == player_id]
+        else:
+            player_events = events[
+                events["player"].apply(
+                    lambda player: player.get("id") == player_id if isinstance(player, dict) else False
+                )
+            ]
         locations = [loc for loc in player_events["location"] if isinstance(loc, list)]
         if not locations:
             return None
@@ -389,11 +392,15 @@ class InterimMetricsProcessor:
 
     def _estimate_minutes_from_events(self, events: pd.DataFrame, player_id: int) -> float:
         """Fallback player-minute estimate based on first and last event times."""
-        player_events = events[
-            events["player"].apply(
-                lambda player: player.get("id") == player_id if isinstance(player, dict) else False
-            )
-        ].reset_index(drop=True)
+        if "player_id" in events.columns:
+            player_events = events[pd.to_numeric(events["player_id"], errors="coerce") == player_id]
+        else:
+            player_events = events[
+                events["player"].apply(
+                    lambda player: player.get("id") == player_id if isinstance(player, dict) else False
+                )
+            ]
+        player_events = player_events.reset_index(drop=True)
         if player_events.empty:
             return 0.0
 
@@ -409,23 +416,48 @@ class InterimMetricsProcessor:
 
     def _players_from_events(self, events: pd.DataFrame, match_id: int) -> pd.DataFrame:
         """Fallback player table when lineup data is missing for a match."""
-        players = events[events["player"].apply(bool)][
-            ["player", "team", "position"]
-        ].drop_duplicates()
-        rows = []
-        for _, row in players.iterrows():
-            player = row["player"]
-            team = row["team"]
-            position = row["position"]
-            rows.append(
-                {
-                    "match_id": match_id,
-                    "player_id": player.get("id"),
-                    "player_name": player.get("name"),
-                    "team_id": team.get("id"),
-                    "team_name": team.get("name"),
-                    "starting_position_name": position.get("name"),
-                    "positions_json": None,
-                }
+        if "player_id" in events.columns:
+            player_ids = pd.to_numeric(events["player_id"], errors="coerce")
+            player_names = events["player"]
+            team_names = events["team"]
+            position_names = events["position"]
+            players = pd.DataFrame({
+                "player_id": player_ids,
+                "player_name": player_names,
+                "team_name": team_names,
+                "position_name": position_names,
+            }).dropna(subset=["player_id"]).drop_duplicates()
+            rows = []
+            for _, row in players.iterrows():
+                rows.append(
+                    {
+                        "match_id": match_id,
+                        "player_id": int(row["player_id"]),
+                        "player_name": row["player_name"],
+                        "team_id": None,
+                        "team_name": row["team_name"],
+                        "starting_position_name": row["position_name"],
+                        "positions_json": None,
+                    }
+                )
+        else:
+            players = events[events["player"].apply(bool)][
+                ["player", "team", "position"]
+            ].drop_duplicates()
+            rows = []
+            for _, row in players.iterrows():
+                player = row["player"]
+                team = row["team"]
+                position = row["position"]
+                rows.append(
+                    {
+                        "match_id": match_id,
+                        "player_id": player.get("id"),
+                        "player_name": player.get("name"),
+                        "team_id": team.get("id"),
+                        "team_name": team.get("name"),
+                        "starting_position_name": position.get("name"),
+                        "positions_json": None,
+                    }
             )
         return pd.DataFrame(rows)

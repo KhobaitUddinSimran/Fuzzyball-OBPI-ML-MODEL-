@@ -45,7 +45,12 @@ _NORMALIZED_METRIC_COLUMNS = [f"M{i}" for i in range(1, 10)]
 
 def _extract_unique_players(events: pd.DataFrame) -> list[int]:
     """Return sorted list of unique player IDs present in the events."""
-    if events.empty or "player" not in events.columns:
+    if events.empty:
+        return []
+    if "player_id" in events.columns:
+        players = pd.to_numeric(events["player_id"], errors="coerce")
+        return sorted({int(pid) for pid in players if pd.notna(pid)})
+    if "player" not in events.columns:
         return []
     players = events["player"].apply(
         lambda p: p.get("id") if isinstance(p, dict) else None
@@ -208,13 +213,16 @@ def compute_all_metrics(
         if frames and cached_sci is not None:
             row["M7_SCI"] = cached_sci
             # Use player's average location as proxy for SC analysis
-            player_events = events[
-                events["player"].apply(
-                    lambda p, pid=player_id: (
-                        p.get("id") == pid if isinstance(p, dict) else False
+            if "player_id" in events.columns:
+                player_events = events[pd.to_numeric(events["player_id"], errors="coerce") == player_id]
+            else:
+                player_events = events[
+                    events["player"].apply(
+                        lambda p, pid=player_id: (
+                            p.get("id") == pid if isinstance(p, dict) else False
+                        )
                     )
-                )
-            ]
+                ]
             locs = player_events["location"].dropna()
             if not locs.empty:
                 avg_loc = [
