@@ -1,0 +1,476 @@
+{
+  "data_coverage": {
+    "processed_player_match_rows": 549,
+    "processed_players": 251,
+    "processed_matches": 216,
+    "rows_with_360_data": 549,
+    "frame_count_mean": 24.825136612021858,
+    "frame_count_min": 1.0,
+    "frame_count_max": 25.0,
+    "manifest_matches": 2650,
+    "matches_with_three_sixty_file": 300,
+    "matches_with_freeze_frames": 293,
+    "freeze_frame_events": 976692
+  },
+  "target_population": {
+    "positions": {
+      "Center Attacking Midfield": 289,
+      "Right Attacking Midfield": 135,
+      "Left Attacking Midfield": 125
+    },
+    "note": "Current validation subset is attacking-midfield roles with 360 coverage."
+  },
+  "score_distribution": {
+    "count": 549,
+    "mean": 0.5040148215163501,
+    "std": 0.1193788075419708,
+    "min": 0.11111111111111108,
+    "p25": 0.41801331515515716,
+    "median": 0.5013253207681969,
+    "p75": 0.5894519964492841,
+    "max": 0.8178335517316626
+  },
+  "training_labels": {
+    "prepared_rows": 274,
+    "class_counts": {
+      "0": 137,
+      "1": 137
+    },
+    "label_source": "Top and bottom OBPI quartiles; not independent external labels."
+  },
+  "metric_variation": {
+    "M1": {
+      "mean": 0.03642987249544627,
+      "std": 0.18752811249148418,
+      "min": 0.0,
+      "max": 1.0,
+      "nonzero_fraction": 0.03642987249544627
+    },
+    "M2": {
+      "mean": 0.3446504156374204,
+      "std": 0.2998741511581806,
+      "min": 0.0,
+      "max": 1.0,
+      "nonzero_fraction": 0.7577413479052824
+    },
+    "M3": {
+      "mean": 0.5155047999700496,
+      "std": 0.32819113674433986,
+      "min": 0.0,
+      "max": 1.0,
+      "nonzero_fraction": 0.9489981785063752
+    },
+    "M4": {
+      "mean": 0.09537438054935966,
+      "std": 0.24350425958006375,
+      "min": 0.0,
+      "max": 1.0,
+      "nonzero_fraction": 0.9398907103825137
+    },
+    "M5": {
+      "mean": 0.5195176867436349,
+      "std": 0.2606221740178315,
+      "min": 0.0,
+      "max": 1.0,
+      "nonzero_fraction": 0.9471766848816029
+    },
+    "M6": {
+      "mean": 0.4103158947367941,
+      "std": 0.28912638463479096,
+      "min": 0.0,
+      "max": 1.0,
+      "nonzero_fraction": 0.848816029143898
+    },
+    "M7": {
+      "mean": 0.5407784549146939,
+      "std": 0.28015624050487864,
+      "min": 0.0,
+      "max": 1.0,
+      "nonzero_fraction": 0.9453551912568307
+    },
+    "M8": {
+      "mean": 0.06985546329808624,
+      "std": 0.25060060921307814,
+      "min": 0.0,
+      "max": 1.0,
+      "nonzero_fraction": 0.07285974499089254
+    },
+    "M9": {
+      "mean": 0.3583923185954058,
+      "std": 0.2831567763343071,
+      "min": 0.0,
+      "max": 1.0,
+      "nonzero_fraction": 0.8816029143897997
+    }
+  },
+  "model_validation": {
+    "n_samples": 274,
+    "class_counts": {
+      "0": 137,
+      "1": 137
+    },
+    "models": {
+      "logistic": {
+        "model_name": "logistic",
+        "accuracy_mean": 0.9890235690235691,
+        "accuracy_std": 0.0089630616199191,
+        "roc_auc_mean": 1.0,
+        "roc_auc_std": 0.0,
+        "recall_class_1_mean": 0.9854497354497355,
+        "recall_class_1_std": 0.017825270399918547,
+        "n_samples": 274,
+        "n_splits": 5,
+        "best_params": {
+          "classifier__C": 1.0
+        }
+      },
+      "svm": {
+        "model_name": "svm",
+        "accuracy_mean": 0.9926599326599327,
+        "accuracy_std": 0.008990340346547408,
+        "roc_auc_mean": 1.0,
+        "roc_auc_std": 0.0,
+        "recall_class_1_mean": 0.9854497354497355,
+        "recall_class_1_std": 0.017825270399918547,
+        "n_samples": 274,
+        "n_splits": 5,
+        "best_params": {
+          "classifier__C": 10.0,
+          "classifier__gamma": "scale"
+        }
+      },
+      "xgboost": {
+        "model_name": "xgboost",
+        "accuracy_mean": 0.9927272727272728,
+        "accuracy_std": 0.00890723542830247,
+        "roc_auc_mean": 1.0,
+        "roc_auc_std": 0.0,
+        "recall_class_1_mean": 0.9928571428571429,
+        "recall_class_1_std": 0.01428571428571428,
+        "n_samples": 274,
+        "n_splits": 5,
+        "best_params": {
+          "learning_rate": 0.1,
+          "max_depth": 3,
+          "subsample": 0.8
+        }
+      }
+    },
+    "best_accuracy_model": "xgboost",
+    "notes": []
+  },
+  "explainability": {
+    "model_name": "xgboost",
+    "metric_weights": {
+      "M9": 0.4888108819657749,
+      "M7": 0.23058358929354975,
+      "M6": 0.1496270293988584,
+      "M2": 0.09697235629662213,
+      "M5": 0.029837648091267748,
+      "M4": 0.0039491004826679044,
+      "M3": 0.00021939447125915025,
+      "M1": 0.0,
+      "M8": 0.0
+    },
+    "permutation_importance_ranking": [
+      "M9",
+      "M7",
+      "M6",
+      "M2",
+      "M5",
+      "M4",
+      "M3",
+      "M1",
+      "M8"
+    ],
+    "shap_available": true,
+    "notes": [],
+    "mean_abs_shap_ranking": {
+      "M9": 1.5035311660729926,
+      "M6": 1.25260427429927,
+      "M7": 1.18237962235073,
+      "M2": 1.019667589989051,
+      "M5": 0.9793859519393068,
+      "M3": 0.9038049996499999,
+      "M4": 0.7244416571317519,
+      "M1": 0.0,
+      "M8": 0.0
+    }
+  },
+  "robustness_validation": {
+    "status": "complete",
+    "caps": [
+      {
+        "frame_cap": 25,
+        "player_match_rows": 549,
+        "prepared_rows": 274,
+        "xgboost_accuracy_mean": 0.9927272727272728,
+        "svm_accuracy_mean": 0.9926599326599327,
+        "logistic_accuracy_mean": 0.9890235690235691
+      },
+      {
+        "frame_cap": 50,
+        "player_match_rows": 549,
+        "prepared_rows": 274,
+        "xgboost_accuracy_mean": 0.9926599326599327,
+        "svm_accuracy_mean": 0.9926599326599327,
+        "logistic_accuracy_mean": 0.9854545454545456
+      },
+      {
+        "frame_cap": 75,
+        "player_match_rows": 549,
+        "prepared_rows": 274,
+        "xgboost_accuracy_mean": 0.9927272727272728,
+        "svm_accuracy_mean": 0.9853872053872055,
+        "logistic_accuracy_mean": 0.9853872053872055
+      }
+    ],
+    "xgboost_accuracy_range": 6.734006734010478e-05
+  },
+  "aggregate_validation": {
+    "match_level": {
+      "n_samples": 274,
+      "n_rows": 274,
+      "class_counts": {
+        "0": 137,
+        "1": 137
+      },
+      "best_accuracy_model": "xgboost",
+      "models": {
+        "logistic": {
+          "model_name": "logistic",
+          "accuracy_mean": 0.9890235690235691,
+          "accuracy_std": 0.0089630616199191,
+          "roc_auc_mean": 1.0,
+          "roc_auc_std": 0.0,
+          "recall_class_1_mean": 0.9854497354497355,
+          "recall_class_1_std": 0.017825270399918547,
+          "n_samples": 274,
+          "n_splits": 5,
+          "best_params": {
+            "classifier__C": 1.0
+          }
+        },
+        "svm": {
+          "model_name": "svm",
+          "accuracy_mean": 0.9926599326599327,
+          "accuracy_std": 0.008990340346547408,
+          "roc_auc_mean": 1.0,
+          "roc_auc_std": 0.0,
+          "recall_class_1_mean": 0.9854497354497355,
+          "recall_class_1_std": 0.017825270399918547,
+          "n_samples": 274,
+          "n_splits": 5,
+          "best_params": {
+            "classifier__C": 10.0,
+            "classifier__gamma": "scale"
+          }
+        },
+        "xgboost": {
+          "model_name": "xgboost",
+          "accuracy_mean": 0.9927272727272728,
+          "accuracy_std": 0.00890723542830247,
+          "roc_auc_mean": 1.0,
+          "roc_auc_std": 0.0,
+          "recall_class_1_mean": 0.9928571428571429,
+          "recall_class_1_std": 0.01428571428571428,
+          "n_samples": 274,
+          "n_splits": 5,
+          "best_params": {
+            "learning_rate": 0.1,
+            "max_depth": 3,
+            "subsample": 0.8
+          }
+        }
+      }
+    },
+    "aggregate_player_level": {
+      "n_samples": 126,
+      "n_rows": 252,
+      "class_counts": {
+        "0": 63,
+        "1": 63
+      },
+      "best_accuracy_model": "logistic",
+      "models": {
+        "logistic": {
+          "model_name": "logistic",
+          "accuracy_mean": 0.992,
+          "accuracy_std": 0.016000000000000014,
+          "roc_auc_mean": 1.0,
+          "roc_auc_std": 0.0,
+          "recall_class_1_mean": 1.0,
+          "recall_class_1_std": 0.0,
+          "n_samples": 126,
+          "n_splits": 5,
+          "best_params": {
+            "classifier__C": 0.1
+          }
+        },
+        "svm": {
+          "model_name": "svm",
+          "accuracy_mean": 0.584,
+          "accuracy_std": 0.20800000000000002,
+          "roc_auc_mean": 1.0,
+          "roc_auc_std": 0.0,
+          "recall_class_1_mean": 0.6,
+          "recall_class_1_std": 0.48989794855663565,
+          "n_samples": 126,
+          "n_splits": 5,
+          "best_params": {
+            "classifier__C": 0.1,
+            "classifier__gamma": 0.001
+          }
+        },
+        "xgboost": {
+          "model_name": "xgboost",
+          "accuracy_mean": 0.9763076923076923,
+          "accuracy_std": 0.03185172749441853,
+          "roc_auc_mean": 0.9948717948717949,
+          "roc_auc_std": 0.010256410256410265,
+          "recall_class_1_mean": 0.9512820512820512,
+          "recall_class_1_std": 0.06607230116269294,
+          "n_samples": 126,
+          "n_splits": 5,
+          "best_params": {
+            "learning_rate": 0.2,
+            "max_depth": 3,
+            "subsample": 0.8
+          }
+        }
+      }
+    },
+    "aggregate_rows": 252,
+    "interpretation": "Aggregate validation tests whether the signal persists when repeated player-match rows are collapsed to one row per player."
+  },
+  "external_validation_report": {
+    "status": "complete",
+    "benchmark_source": "FIFA 23 complete player dataset",
+    "benchmark_source_url": "https://www.kaggle.com/datasets/stefanoleone992/fifa-23-complete-player-dataset",
+    "source_file": "male_players.csv",
+    "source_file_note": "Raw Kaggle CSV is intentionally local-only and not committed.",
+    "fifa_version": 23,
+    "fifa_update": 9,
+    "fifa_update_date": "2023-01-13",
+    "fifa_rows_available": 18127,
+    "obpi_players": 252,
+    "matched_players": 230,
+    "unmatched_players": 22,
+    "match_rate": 0.9126984126984127,
+    "match_type_counts": {
+      "exact_name": 196,
+      "token_containment": 31,
+      "fuzzy_name": 3
+    },
+    "min_fuzzy_confidence": 0.9,
+    "ratings_output": "data/external/fifa_ratings.csv",
+    "match_audit_output": "data/external/fifa_ratings_match_audit.csv",
+    "benchmark_columns": [
+      "fifa_overall",
+      "fifa_potential",
+      "fifa_passing",
+      "fifa_dribbling",
+      "fifa_vision",
+      "fifa_reactions",
+      "fifa_shooting",
+      "fifa_pace",
+      "fifa_physic",
+      "fifa_defending"
+    ],
+    "benchmark_validation": [
+      {
+        "benchmark": "fifa_shooting",
+        "spearman_rho": 0.10241475435265412,
+        "p_value": 0.1214275369086003,
+        "n": 230
+      },
+      {
+        "benchmark": "fifa_pace",
+        "spearman_rho": 0.09250753757521527,
+        "p_value": 0.16202223010542846,
+        "n": 230
+      },
+      {
+        "benchmark": "fifa_potential",
+        "spearman_rho": 0.07185364122769095,
+        "p_value": 0.27784171887924025,
+        "n": 230
+      },
+      {
+        "benchmark": "fifa_physic",
+        "spearman_rho": 0.05097813629742466,
+        "p_value": 0.44165003817195114,
+        "n": 230
+      },
+      {
+        "benchmark": "fifa_reactions",
+        "spearman_rho": 0.012944955418366747,
+        "p_value": 0.8451905708307719,
+        "n": 230
+      },
+      {
+        "benchmark": "fifa_overall",
+        "spearman_rho": 0.0004725349737362957,
+        "p_value": 0.9943132833251902,
+        "n": 230
+      },
+      {
+        "benchmark": "fifa_dribbling",
+        "spearman_rho": -0.011557913370608646,
+        "p_value": 0.8616020101940982,
+        "n": 230
+      },
+      {
+        "benchmark": "fifa_vision",
+        "spearman_rho": -0.10758675375393394,
+        "p_value": 0.10363705016182535,
+        "n": 230
+      },
+      {
+        "benchmark": "fifa_passing",
+        "spearman_rho": -0.12488856103640777,
+        "p_value": 0.05860834299352767,
+        "n": 230
+      },
+      {
+        "benchmark": "fifa_defending",
+        "spearman_rho": -0.14555337035452748,
+        "p_value": 0.027302418242875656,
+        "n": 230
+      }
+    ],
+    "unmatched_sample": [
+      "Andr\u00e9 Ayew Pel\u00e9",
+      "Daichi Kamada",
+      "Georgiy Sudakov",
+      "Ghilane Chalali",
+      "Gustavo Adolfo Puerta Molano",
+      "Hattan Babhir",
+      "Jean-Matt\u00e9o Bahoya N\u00e9goce",
+      "Kobbie Mainoo",
+      "Maksim Mukhin",
+      "Mert K\u00f6m\u00fcr",
+      "Miralem Pjani\u0107",
+      "Mohamed Ali Ben Romdhane",
+      "Mohamed Zeki Amdouni",
+      "Moriba Kourouma Kourouma",
+      "Pep Biel Mas Jaume",
+      "Peter Stroud",
+      "Qazim La\u00e7i",
+      "Romario Andr\u00e9s Ibarra Mina",
+      "Vladim\u00edr Darida",
+      "Warren Zaire Emery",
+      "Youssef Msakni",
+      "\u00c9verton Augusto de Barros Ribeiro"
+    ],
+    "interpretation": "FIFA ratings are an external commercial player-quality benchmark, not an expert panel and not event-level ground truth. Spearman rho measures convergent validity between aggregate OBPI and FIFA attributes on the matched subset."
+  },
+  "validity_status": {
+    "pipeline_validation": "complete",
+    "construct_validation": "internal_obpi_extreme_quartile_only",
+    "robustness_validation": "complete",
+    "external_validation": "complete",
+    "interpretation": "Use current scores as 360-enriched internal validation evidence. Do not present them as final independent convergent validity unless external_validation is complete."
+  },
+  "next_validation_requirements": []
+}

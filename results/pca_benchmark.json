@@ -1,0 +1,36 @@
+{
+  "data_warning": "Synthetic smoke-test only. Replace with real benchmark data before interpretation.",
+  "explained_variance_ratio": [
+    0.9367158213492456,
+    0.036981515843440296,
+    0.02103222244492521,
+    0.0052704403623890055
+  ],
+  "loadings": {
+    "PC1": {
+      "obpi": 0.5110795946077774,
+      "synthetic_inverse": -0.49806381160074636,
+      "synthetic_rating": 0.4875459602778109,
+      "synthetic_xThreat": 0.5030199043438278
+    },
+    "PC2": {
+      "obpi": -0.19803280219308322,
+      "synthetic_inverse": 0.47400993649178286,
+      "synthetic_rating": 0.845016205540434,
+      "synthetic_xThreat": -0.1484762665770466
+    },
+    "PC3": {
+      "obpi": 0.10985710627812512,
+      "synthetic_inverse": 0.644304419898083,
+      "synthetic_rating": -0.20780396021240474,
+      "synthetic_xThreat": 0.7277504687872299
+    },
+    "PC4": {
+      "obpi": 0.8291634781098972,
+      "synthetic_inverse": 0.33484150606008645,
+      "synthetic_rating": -0.07116223092958592,
+      "synthetic_xThreat": -0.44193328600280307
+    }
+  },
+  "n": 90
+}

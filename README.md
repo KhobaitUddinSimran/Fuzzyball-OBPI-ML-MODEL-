@@ -3,6 +3,8 @@
 
 An advanced sports data science framework that uses **StatsBomb 360 Freeze-Frame Data**, **Mamdani Fuzzy Inference Systems (FIS)**, and **Support Vector Machines (SVM)** to mathematically grade space creation, temporal control (*La Pausa*), and positioning in elite attacking midfielders.
 
+Final write-up: [FINAL_PROJECT_REPORT.md](FINAL_PROJECT_REPORT.md)
+
 ---
 
 ## 🏗️ 1. Pipeline Architecture
@@ -76,8 +78,137 @@ The machine learning layer works strictly as a **discriminant validation instrum
 
 ## 🛠️ 4. Setup & Python Control Engine Initialization
 
+### Installation
+
 ```bash
-pip install statsbombpy scikit-fuzzy scipy scikit-learn pandas numpy
+pip install -r requirements.txt
+```
+
+### Download full men's StatsBomb open data
+
+To pull every men's senior competition listed in the official open-data index,
+including competition metadata plus all linked match, event, and lineup files:
+
+```bash
+python scripts/download_statsbomb_mens_open_data.py --skip-existing --include-360
+```
+
+By default, files are stored in:
+
+```text
+data/raw/statsbomb_open_data/
+  competitions.json
+  matches/
+  events/
+  lineups/
+  three-sixty/
+```
+
+Use `--output-dir` if you want to place the dataset somewhere else.
+
+### Preprocess downloaded open data
+
+Once the raw dataset is available locally, convert it into interim parquet
+tables and per-match event partitions:
+
+```bash
+python3 scripts/preprocess_statsbomb_open_data.py
+```
+
+This writes:
+
+```text
+data/interim/
+  competitions.parquet
+  matches.parquet
+  player_matches.parquet
+  events_manifest.parquet
+  events_by_match/
+```
+
+If `data/raw/statsbomb_open_data/three-sixty/` is present, the preprocessor
+automatically merges standalone StatsBomb 360 frames into the per-match event
+parquet files and records coverage in `events_manifest.parquet`.
+
+To compute metrics only for matches with 360 coverage:
+
+```bash
+python3 scripts/process_interim_metrics.py --require-360
+```
+
+For the attacking-midfielder validation subset used by the current research
+pipeline, use the 360 subset with a bounded, evenly sampled frame list:
+
+```bash
+python3 scripts/process_interim_metrics.py \
+  --require-360 \
+  --position-keyword "Attacking Midfield" \
+  --max-frames-per-match 25
+```
+
+### Running the pipeline
+
+```bash
+python -m obpi.pipeline --match-id 3794686 --verbose
+```
+
+CLI flags:
+- `--match-id` (required): StatsBomb match identifier.
+- `--tier`: Data tier — `open` (default) or `api`.
+- `--config`: Path to custom YAML config (default: `config/default.yaml`).
+- `--output`: Cache directory for Parquet files (default: `data/processed`).
+- `--verbose`: Enable debug logging.
+
+### Training the xT model
+
+```bash
+python -m obpi.ml.xt_trainer
+```
+
+This downloads open-data shots with 360 frames, trains a logistic-regression xG model, smooths the resulting 12×8 grid with a Gaussian kernel, and saves it to `data/processed/xt_grid_12x8.npy`. The `XTModel` class loads this grid automatically when present; otherwise it falls back to a synthetic ramp.
+
+### Configuration
+
+All hard-coded thresholds have been moved to `config/default.yaml`:
+
+```yaml
+movement:
+  v_threshold: 2.5
+  duration_threshold: 0.4
+  max_dt: 1.5
+
+receiving:
+  proximity_threshold: 2.5
+  pressure_radius: 5.0
+  cone_angle: 45.0
+  cone_length: 15.0
+
+temporal:
+  min_dt: 1.2
+  max_vel: 0.5
+  angle_threshold: 30.0
+  lane_buffer: 1.5
+```
+
+Override any value by passing a custom YAML file via `--config`.
+
+### Validation
+
+```python
+from obpi.validation.checks import validate
+
+result = validate(df)
+assert result["valid"]  # schema, finiteness, and range checks
+print(result["summary"])  # per-metric mean / std / min / max
+```
+
+### Logging
+
+Structured logging is configured via `obpi.utils.logger.setup_logging`. When `--verbose` is passed, debug-level logs include match-level event/frame counts and cache hit/miss messages.
+
+### Legacy fuzzy snippet
+
+```python
 import numpy as np
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
@@ -96,3 +227,21 @@ rule2 = ctrl.Rule(metric_in['Medium'], score_out['Medium'])
 rule3 = ctrl.Rule(metric_in['High'], score_out['High'])
 
 obpi_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem([rule1, rule2, rule3]))
+```
+
+### Fuzzy aggregation as downstream scoring
+
+The M1-M9 metrics engine remains the source of truth. Fuzzy aggregation is an
+additive downstream step that consumes an existing metrics DataFrame:
+
+```python
+from obpi.pipeline import compute_all_metrics, run_fuzzy_pipeline
+
+metrics_df = compute_all_metrics(match_id=3794686)
+scored_df = run_fuzzy_pipeline(metrics_df)
+```
+
+`run_fuzzy_pipeline()` supports both the pipeline metric schema
+(`M1_SC`, `M2_OIRC`, ..., `M9_CBI`) and normalized Person 2 columns
+(`M1`, `M2`, ..., `M9`). It writes an OBPI score column in `[0, 1]` without
+modifying or replacing the existing metrics pipeline.
