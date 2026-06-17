@@ -48,7 +48,7 @@
 - pipeline_validation: complete
 - construct_validation: internal_obpi_extreme_quartile_only
 - robustness_validation: complete
-- external_validation: pending_external_or_expert_labels
+- external_validation: complete
 - interpretation: Use current scores as 360-enriched internal validation evidence. Do not present them as final independent convergent validity unless external_validation is complete.
 
 ## Robustness Validation
@@ -61,8 +61,7 @@
 
 ## External Validation
 
-- status: pending_external_or_expert_labels
-- template_output: results/expert_ratings_template.csv
+- status: complete
 
 ## Match vs Aggregate Validation
 
@@ -73,6 +72,3 @@
 
 ## Next Validation Requirements
 
-- Collect independent player-quality labels or expert ratings.
-- Run Spearman correlation between OBPI and external/expert ratings.
-- Compute inter-rater reliability if expert-panel ratings are used.

@@ -1,0 +1,122 @@
+{
+  "status": "complete",
+  "benchmark_source": "FIFA 23 complete player dataset",
+  "benchmark_source_url": "https://www.kaggle.com/datasets/stefanoleone992/fifa-23-complete-player-dataset",
+  "source_file": "male_players.csv",
+  "source_file_note": "Raw Kaggle CSV is intentionally local-only and not committed.",
+  "fifa_version": 23,
+  "fifa_update": 9,
+  "fifa_update_date": "2023-01-13",
+  "fifa_rows_available": 18127,
+  "obpi_players": 252,
+  "matched_players": 230,
+  "unmatched_players": 22,
+  "match_rate": 0.9126984126984127,
+  "match_type_counts": {
+    "exact_name": 196,
+    "token_containment": 31,
+    "fuzzy_name": 3
+  },
+  "min_fuzzy_confidence": 0.9,
+  "ratings_output": "data/external/fifa_ratings.csv",
+  "match_audit_output": "data/external/fifa_ratings_match_audit.csv",
+  "benchmark_columns": [
+    "fifa_overall",
+    "fifa_potential",
+    "fifa_passing",
+    "fifa_dribbling",
+    "fifa_vision",
+    "fifa_reactions",
+    "fifa_shooting",
+    "fifa_pace",
+    "fifa_physic",
+    "fifa_defending"
+  ],
+  "benchmark_validation": [
+    {
+      "benchmark": "fifa_shooting",
+      "spearman_rho": 0.10241475435265412,
+      "p_value": 0.1214275369086003,
+      "n": 230
+    },
+    {
+      "benchmark": "fifa_pace",
+      "spearman_rho": 0.09250753757521527,
+      "p_value": 0.16202223010542846,
+      "n": 230
+    },
+    {
+      "benchmark": "fifa_potential",
+      "spearman_rho": 0.07185364122769095,
+      "p_value": 0.27784171887924025,
+      "n": 230
+    },
+    {
+      "benchmark": "fifa_physic",
+      "spearman_rho": 0.05097813629742466,
+      "p_value": 0.44165003817195114,
+      "n": 230
+    },
+    {
+      "benchmark": "fifa_reactions",
+      "spearman_rho": 0.012944955418366747,
+      "p_value": 0.8451905708307719,
+      "n": 230
+    },
+    {
+      "benchmark": "fifa_overall",
+      "spearman_rho": 0.0004725349737362957,
+      "p_value": 0.9943132833251902,
+      "n": 230
+    },
+    {
+      "benchmark": "fifa_dribbling",
+      "spearman_rho": -0.011557913370608646,
+      "p_value": 0.8616020101940982,
+      "n": 230
+    },
+    {
+      "benchmark": "fifa_vision",
+      "spearman_rho": -0.10758675375393394,
+      "p_value": 0.10363705016182535,
+      "n": 230
+    },
+    {
+      "benchmark": "fifa_passing",
+      "spearman_rho": -0.12488856103640777,
+      "p_value": 0.05860834299352767,
+      "n": 230
+    },
+    {
+      "benchmark": "fifa_defending",
+      "spearman_rho": -0.14555337035452748,
+      "p_value": 0.027302418242875656,
+      "n": 230
+    }
+  ],
+  "unmatched_sample": [
+    "Andr\u00e9 Ayew Pel\u00e9",
+    "Daichi Kamada",
+    "Georgiy Sudakov",
+    "Ghilane Chalali",
+    "Gustavo Adolfo Puerta Molano",
+    "Hattan Babhir",
+    "Jean-Matt\u00e9o Bahoya N\u00e9goce",
+    "Kobbie Mainoo",
+    "Maksim Mukhin",
+    "Mert K\u00f6m\u00fcr",
+    "Miralem Pjani\u0107",
+    "Mohamed Ali Ben Romdhane",
+    "Mohamed Zeki Amdouni",
+    "Moriba Kourouma Kourouma",
+    "Pep Biel Mas Jaume",
+    "Peter Stroud",
+    "Qazim La\u00e7i",
+    "Romario Andr\u00e9s Ibarra Mina",
+    "Vladim\u00edr Darida",
+    "Warren Zaire Emery",
+    "Youssef Msakni",
+    "\u00c9verton Augusto de Barros Ribeiro"
+  ],
+  "interpretation": "FIFA ratings are an external commercial player-quality benchmark, not an expert panel and not event-level ground truth. Spearman rho measures convergent validity between aggregate OBPI and FIFA attributes on the matched subset."
+}

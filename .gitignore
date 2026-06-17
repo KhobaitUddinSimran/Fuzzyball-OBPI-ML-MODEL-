@@ -226,3 +226,4 @@ data/processed/
 data/raw/*
 !data/raw/statsbomb_open_data/
 !data/raw/statsbomb_open_data/**
+data/raw/statsbomb_open_data/
