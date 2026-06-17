@@ -413,3 +413,12 @@ def test_process_matches_require_360_filters_manifest(tmp_path: Path) -> None:
     match_metrics = processor.process_matches(require_360=True)
 
     assert set(match_metrics["match_id"]) == {1}
+
+
+def test_sample_frames_evenly_caps_long_sequences(tmp_path: Path) -> None:
+    processor = InterimMetricsProcessor(interim_dir=tmp_path, output_dir=tmp_path)
+    frames = [{"idx": idx} for idx in range(10)]
+
+    sampled = processor._sample_frames(frames, max_frames=4)
+
+    assert [frame["idx"] for frame in sampled] == [0, 3, 6, 9]

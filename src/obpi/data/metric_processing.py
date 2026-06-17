@@ -10,7 +10,7 @@ from typing import Any
 import pandas as pd
 
 from obpi.config.loader import Config, load_config
-from obpi.metrics.movement import compute_obr90, compute_oirc
+from obpi.metrics.movement import _exclude_set_pieces, compute_obr90, compute_oirc
 from obpi.metrics.receiving import compute_brpc, compute_rbtl, compute_rup
 from obpi.metrics.spatial import compute_sc, compute_sci
 from obpi.metrics.temporal import compute_cbi, compute_lpc
@@ -98,6 +98,8 @@ class InterimMetricsProcessor:
         self,
         match_ids: Iterable[int] | None = None,
         require_360: bool = False,
+        max_frames_per_match: int | None = None,
+        position_keywords: list[str] | None = None,
     ) -> pd.DataFrame:
         """Compute player-match metrics and persist them to parquet."""
         player_matches = pd.read_parquet(self.interim_dir / "player_matches.parquet")
@@ -126,11 +128,23 @@ class InterimMetricsProcessor:
 
             event_frame = pd.read_parquet(events_path)
             events = self._to_statsbomb_events(event_frame)
+            movement_events = _exclude_set_pieces(events)
             frames = self._extract_frames(event_frame)
+            frames = self._sample_frames(frames, max_frames_per_match)
             match_players = player_matches[player_matches["match_id"] == match_id]
+            has_lineup_rows = not match_players.empty
+            if position_keywords:
+                position_pattern = "|".join(position_keywords)
+                match_players = match_players[
+                    match_players["starting_position_name"]
+                    .fillna("")
+                    .str.contains(position_pattern, case=False, regex=True)
+                ]
 
-            if match_players.empty:
+            if match_players.empty and not has_lineup_rows:
                 match_players = self._players_from_events(events, match_id)
+            if match_players.empty:
+                continue
 
             cached_sci = compute_sci(frames[:-1], frames[1:]) if len(frames) >= 2 else 0.0
             for _, player_row in match_players.iterrows():
@@ -156,7 +170,11 @@ class InterimMetricsProcessor:
                             if len(frames) >= 2 and avg_loc is not None
                             else 0.0
                         ),
-                        "M2_OIRC": compute_oirc(events, player_id),
+                        "M2_OIRC": compute_oirc(
+                            movement_events,
+                            player_id,
+                            exclude_set_pieces=False,
+                        ),
                         "M3_BRPC": compute_brpc(
                             events,
                             frames,
@@ -174,6 +192,7 @@ class InterimMetricsProcessor:
                             v_threshold=self.config.movement.v_threshold,
                             duration_threshold=self.config.movement.duration_threshold,
                             max_dt=self.config.movement.max_dt,
+                            exclude_set_pieces=False,
                         ),
                         "M5_RBTL": compute_rbtl(events, player_id),
                         "M6_RUP": compute_rup(
@@ -239,53 +258,45 @@ class InterimMetricsProcessor:
     def _to_statsbomb_events(self, event_frame: pd.DataFrame) -> pd.DataFrame:
         """Rebuild a minimal StatsBomb-style DataFrame for metric functions."""
         df = event_frame.copy()
-        df["type"] = df.apply(
-            lambda row: {"id": row["type_id"], "name": row["type_name"]}
-            if pd.notna(row["type_id"]) or pd.notna(row["type_name"])
-            else {},
-            axis=1,
-        )
-        df["team"] = df.apply(
-            lambda row: {"id": row["team_id"], "name": row["team_name"]}
-            if pd.notna(row["team_id"]) or pd.notna(row["team_name"])
-            else {},
-            axis=1,
-        )
-        df["player"] = df.apply(
-            lambda row: {"id": int(row["player_id"]), "name": row["player_name"]}
-            if pd.notna(row["player_id"])
-            else {},
-            axis=1,
-        )
-        df["position"] = df.apply(
-            lambda row: {"id": row["position_id"], "name": row["position_name"]}
-            if pd.notna(row["position_id"]) or pd.notna(row["position_name"])
-            else {},
-            axis=1,
-        )
-        df["possession_team"] = df.apply(
-            lambda row: {
-                "id": row["possession_team_id"],
-                "name": row["possession_team_name"],
-            }
-            if pd.notna(row["possession_team_id"]) or pd.notna(row["possession_team_name"])
-            else {},
-            axis=1,
-        )
-        df["play_pattern"] = df.apply(
-            lambda row: {"id": row["play_pattern_id"], "name": row["play_pattern_name"]}
-            if pd.notna(row["play_pattern_id"]) or pd.notna(row["play_pattern_name"])
-            else {},
-            axis=1,
-        )
-        df["location"] = df.apply(
-            lambda row: [row["location_x"], row["location_y"]]
-            if pd.notna(row["location_x"]) and pd.notna(row["location_y"])
-            else None,
-            axis=1,
-        )
+        df["type"] = self._id_name_records(df, "type")
+        df["team"] = self._id_name_records(df, "team")
+        df["player"] = self._id_name_records(df, "player", integer_id=True)
+        df["position"] = self._id_name_records(df, "position")
+        df["possession_team"] = self._id_name_records(df, "possession_team")
+        df["play_pattern"] = self._id_name_records(df, "play_pattern")
+        location_x = df["location_x"].tolist()
+        location_y = df["location_y"].tolist()
+        df["location"] = [
+            [location_x[index], location_y[index]]
+            if pd.notna(location_x[index]) and pd.notna(location_y[index])
+            else None
+            for index in range(len(df))
+        ]
         df["pass"] = df.apply(self._build_pass_dict, axis=1)
         return df.sort_values(["period", "timestamp", "index"]).reset_index(drop=True)
+
+    def _id_name_records(
+        self,
+        df: pd.DataFrame,
+        prefix: str,
+        integer_id: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Build StatsBomb-style id/name dicts from flat scalar columns."""
+        id_column = f"{prefix}_id"
+        name_column = f"{prefix}_name"
+        records: list[dict[str, Any]] = []
+        id_values = df[id_column].tolist()
+        name_values = df[name_column].tolist()
+        for index in range(len(df)):
+            id_value = id_values[index]
+            name_value = name_values[index]
+            if pd.isna(id_value) and pd.isna(name_value):
+                records.append({})
+                continue
+            if integer_id and pd.notna(id_value):
+                id_value = int(id_value)
+            records.append({"id": id_value, "name": name_value})
+        return records
 
     def _build_pass_dict(self, row: pd.Series) -> dict[str, Any] | None:
         """Reconstruct the nested pass object used by metric code."""
@@ -342,6 +353,24 @@ class InterimMetricsProcessor:
                 frame["visible_area"] = visible_area
             frames.append(frame)
         return frames
+
+    def _sample_frames(
+        self,
+        frames: list[dict[str, Any]],
+        max_frames: int | None,
+    ) -> list[dict[str, Any]]:
+        """Evenly sample long 360 frame sequences for tractable metric processing."""
+        if max_frames is None or max_frames <= 0 or len(frames) <= max_frames:
+            return frames
+        if max_frames == 1:
+            return [frames[0]]
+
+        last_index = len(frames) - 1
+        indices = {
+            round(position * last_index / (max_frames - 1))
+            for position in range(max_frames)
+        }
+        return [frames[index] for index in sorted(indices)]
 
     def _average_location(self, events: pd.DataFrame, player_id: int) -> list[float] | None:
         """Estimate a player's average event location within a match."""

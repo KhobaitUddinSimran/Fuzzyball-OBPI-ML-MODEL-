@@ -48,10 +48,14 @@ def infer_velocity(
     df = events.copy()
 
     if player_id is not None:
-        df = df[
-            df["player"].apply(lambda p: p.get("id") if isinstance(p, dict) else None)
-            == player_id
-        ]
+        if "player_id" in df.columns:
+            player_ids = pd.to_numeric(df["player_id"], errors="coerce")
+            df = df[player_ids == player_id]
+        else:
+            df = df[
+                df["player"].apply(lambda p: p.get("id") if isinstance(p, dict) else None)
+                == player_id
+            ]
 
     if df.empty:
         df = df.copy()
@@ -67,9 +71,17 @@ def infer_velocity(
     df["period_offset"] = df["period"].apply(lambda p: 0 if p == 1 else 45 * 60).astype(float)
     df["time_sec"] = df["time_sec"] + df["period_offset"]
 
-    # Extract x, y from location lists
-    df["x"] = df["location"].apply(lambda loc: loc[0] if isinstance(loc, (list, tuple)) else np.nan)
-    df["y"] = df["location"].apply(lambda loc: loc[1] if isinstance(loc, (list, tuple)) else np.nan)
+    # Extract x, y from flat columns when available, otherwise from location lists.
+    if {"location_x", "location_y"}.issubset(df.columns):
+        df["x"] = pd.to_numeric(df["location_x"], errors="coerce")
+        df["y"] = pd.to_numeric(df["location_y"], errors="coerce")
+    else:
+        df["x"] = df["location"].apply(
+            lambda loc: loc[0] if isinstance(loc, (list, tuple)) else np.nan
+        )
+        df["y"] = df["location"].apply(
+            lambda loc: loc[1] if isinstance(loc, (list, tuple)) else np.nan
+        )
 
     # Finite differences
     df["dt"] = df["time_sec"].diff()

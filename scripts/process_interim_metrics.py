@@ -40,6 +40,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only process matches that have standalone or merged 360 freeze-frame data.",
     )
+    parser.add_argument(
+        "--max-frames-per-match",
+        type=int,
+        default=None,
+        help=(
+            "Optionally cap each match's 360 frame list with even sampling for "
+            "tractable full-subset processing."
+        ),
+    )
+    parser.add_argument(
+        "--position-keyword",
+        action="append",
+        default=None,
+        help=(
+            "Only process players whose starting position contains this keyword. "
+            "May be supplied multiple times."
+        ),
+    )
     return parser
 
 
@@ -63,6 +81,8 @@ def main() -> int:
     match_metrics = processor.process_matches(
         match_ids=match_ids,
         require_360=args.require_360,
+        max_frames_per_match=args.max_frames_per_match,
+        position_keywords=args.position_keyword,
     )
     aggregate_metrics = processor.aggregate_player_metrics(match_metrics)
     print(f"player_match_metrics: {len(match_metrics)} rows")

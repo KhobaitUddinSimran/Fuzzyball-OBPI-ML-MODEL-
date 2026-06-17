@@ -7,6 +7,7 @@ validation work:
 - ``matches/<competition_id>/<season_id>.json`` for every men's competition
 - ``events/<match_id>.json`` for all discovered matches
 - ``lineups/<match_id>.json`` for all discovered matches
+- optional ``three-sixty/<match_id>.json`` for matches with open 360 data
 
 Files are written under ``data/raw/statsbomb_open_data`` by default.
 """
@@ -24,6 +25,9 @@ from pathlib import Path
 from typing import Any
 
 BASE_URL = "https://raw.githubusercontent.com/statsbomb/open-data/master/data"
+GITHUB_CONTENTS_URL = (
+    "https://api.github.com/repos/statsbomb/open-data/contents/data/three-sixty"
+)
 DEFAULT_OUTPUT_DIR = (
     Path(__file__).resolve().parents[1] / "data" / "raw" / "statsbomb_open_data"
 )
@@ -62,6 +66,23 @@ def download_file(url: str, destination: Path) -> None:
     destination.write_bytes(fetch_bytes(url))
 
 
+def fetch_three_sixty_match_ids() -> set[int]:
+    """Return match IDs that have standalone open-data 360 files."""
+    payload = json.loads(fetch_bytes(GITHUB_CONTENTS_URL).decode("utf-8"))
+    match_ids: set[int] = set()
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name", "")
+        if not name.endswith(".json"):
+            continue
+        try:
+            match_ids.add(int(Path(name).stem))
+        except ValueError:
+            continue
+    return match_ids
+
+
 def is_target_competition(row: dict[str, Any]) -> bool:
     """Keep men's senior competitions only."""
     return row.get("competition_gender") == "male" and not row.get(
@@ -89,6 +110,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not re-download files that already exist locally.",
     )
+    parser.add_argument(
+        "--include-360",
+        action="store_true",
+        help="Also attempt StatsBomb 360 downloads for each discovered match.",
+    )
     return parser
 
 
@@ -110,15 +136,19 @@ def download_match_assets(
     match_id: int,
     output_dir: Path,
     skip_existing: bool,
-) -> tuple[bool, bool]:
-    """Download event and lineup files for a single match."""
+    download_360: bool = False,
+) -> tuple[bool, bool, bool]:
+    """Download event, lineup, and optional 360 files for a single match."""
     events_url = f"{BASE_URL}/events/{match_id}.json"
     events_path = output_dir / "events" / f"{match_id}.json"
     lineups_url = f"{BASE_URL}/lineups/{match_id}.json"
     lineups_path = output_dir / "lineups" / f"{match_id}.json"
+    three_sixty_url = f"{BASE_URL}/three-sixty/{match_id}.json"
+    three_sixty_path = output_dir / "three-sixty" / f"{match_id}.json"
 
     event_ok = False
     lineup_ok = False
+    three_sixty_ok = False
 
     try:
         maybe_download_file(events_url, events_path, skip_existing)
@@ -132,7 +162,14 @@ def download_match_assets(
     except urllib.error.URLError as exc:
         print(f"Skipping lineups for match {match_id}: {exc}", file=sys.stderr)
 
-    return event_ok, lineup_ok
+    if download_360:
+        try:
+            maybe_download_file(three_sixty_url, three_sixty_path, skip_existing)
+            three_sixty_ok = True
+        except urllib.error.URLError as exc:
+            print(f"Skipping 360 for match {match_id}: {exc}", file=sys.stderr)
+
+    return event_ok, lineup_ok, three_sixty_ok
 
 
 def main() -> int:
@@ -179,19 +216,38 @@ def main() -> int:
 
     print(f"Downloaded {match_file_count} match files covering {len(match_ids)} matches.")
 
+    three_sixty_match_ids: set[int] = set()
+    if args.include_360:
+        try:
+            three_sixty_match_ids = fetch_three_sixty_match_ids() & match_ids
+        except urllib.error.URLError as exc:
+            print(f"Failed to fetch three-sixty index: {exc}", file=sys.stderr)
+            return 1
+        print(f"Found {len(three_sixty_match_ids)} men's matches with 360 files.")
+
     event_count = 0
     lineup_count = 0
+    three_sixty_count = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = [
-            executor.submit(download_match_assets, match_id, output_dir, args.skip_existing)
+            executor.submit(
+                download_match_assets,
+                match_id,
+                output_dir,
+                args.skip_existing,
+                match_id in three_sixty_match_ids,
+            )
             for match_id in sorted(match_ids)
         ]
         for future in concurrent.futures.as_completed(futures):
-            event_ok, lineup_ok = future.result()
+            event_ok, lineup_ok, three_sixty_ok = future.result()
             event_count += int(event_ok)
             lineup_count += int(lineup_ok)
+            three_sixty_count += int(three_sixty_ok)
 
     print(f"Downloaded {event_count} event files and {lineup_count} lineup files.")
+    if args.include_360:
+        print(f"Downloaded {three_sixty_count} three-sixty files.")
     print(f"Saved dataset under: {output_dir}")
     return 0
 

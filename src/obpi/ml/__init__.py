@@ -19,6 +19,10 @@ from obpi.ml.explainability import (
     save_explainability_results,
     save_metric_weights,
 )
+from obpi.ml.research_validation import (
+    build_validation_audit,
+    save_validation_audit,
+)
 from obpi.ml.validation import (
     METRIC_COLUMNS,
     TrainingPreparationResult,
@@ -46,6 +50,7 @@ __all__ = [
     "compute_permutation_importance",
     "compute_shap",
     "create_labels",
+    "build_validation_audit",
     "extract_prepared_xy",
     "evaluate_estimator",
     "evaluate_holdout_predictions",
@@ -58,6 +63,7 @@ __all__ = [
     "orthogonal_variance_test",
     "run_ablation",
     "run_explainability",
+    "save_validation_audit",
     "save_explainability_results",
     "save_training_preparation",
     "save_metric_weights",

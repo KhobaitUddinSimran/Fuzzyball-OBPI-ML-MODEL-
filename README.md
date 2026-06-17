@@ -88,7 +88,7 @@ To pull every men's senior competition listed in the official open-data index,
 including competition metadata plus all linked match, event, and lineup files:
 
 ```bash
-python scripts/download_statsbomb_mens_open_data.py --skip-existing
+python scripts/download_statsbomb_mens_open_data.py --skip-existing --include-360
 ```
 
 By default, files are stored in:
@@ -132,6 +132,16 @@ To compute metrics only for matches with 360 coverage:
 
 ```bash
 python3 scripts/process_interim_metrics.py --require-360
+```
+
+For the attacking-midfielder validation subset used by the current research
+pipeline, use the 360 subset with a bounded, evenly sampled frame list:
+
+```bash
+python3 scripts/process_interim_metrics.py \
+  --require-360 \
+  --position-keyword "Attacking Midfield" \
+  --max-frames-per-match 25
 ```
 
 ### Running the pipeline
