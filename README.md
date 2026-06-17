@@ -3,6 +3,8 @@
 
 An advanced sports data science framework that uses **StatsBomb 360 Freeze-Frame Data**, **Mamdani Fuzzy Inference Systems (FIS)**, and **Support Vector Machines (SVM)** to mathematically grade space creation, temporal control (*La Pausa*), and positioning in elite attacking midfielders.
 
+Final write-up: [FINAL_PROJECT_REPORT.md](FINAL_PROJECT_REPORT.md)
+
 ---
 
 ## 🏗️ 1. Pipeline Architecture
