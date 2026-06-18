@@ -18,37 +18,37 @@ export default function MatchesPage() {
 
 function MatchesPageContent() {
   const searchParams = useSearchParams();
-  const date = searchParams.get("date");
+  const year = searchParams.get("year");
   const [matches, setMatches] = useState([]);
-  const [loading, setLoading] = useState(Boolean(date));
+  const [loading, setLoading] = useState(Boolean(year));
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!date) return;
+    if (!year) return;
 
     setLoading(true);
     setError("");
-    fetch(`/api/matches?date=${encodeURIComponent(date)}`)
+    fetch(`/api/matches?year=${encodeURIComponent(year)}`)
       .then((response) => {
-        if (!response.ok) throw new Error("Unable to load matches for this date");
+        if (!response.ok) throw new Error("Unable to load matches for this year");
         return response.json();
       })
       .then(setMatches)
       .catch((requestError) => setError(requestError.message))
       .finally(() => setLoading(false));
-  }, [date]);
+  }, [year]);
 
   return (
     <PageContainer
       eyebrow="Step 2"
-      title={date ? `Matches on ${date}` : "Select a match date"}
+      title={year ? `FIFA World Cup ${year} Matches` : "Select a World Cup year"}
       subtitle="Choose the FIFA World Cup match you want to inspect."
-      actions={<Link href="/" className="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:border-sky-400 hover:text-sky-300">Back to dates</Link>}
+      actions={<Link href="/" className="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:border-sky-400 hover:text-sky-300">Back to years</Link>}
     >
-      {!date ? <ErrorState title="Missing date" message="Return to the date screen and select a FIFA World Cup date." /> : null}
+      {!year ? <ErrorState title="Missing year" message="Return to the first screen, choose a FIFA World Cup year, and click Search." /> : null}
       {loading ? <LoadingState label="Loading matches" /> : null}
       {error ? <ErrorState title="Could not load matches" message={error} /> : null}
-      {!loading && !error && date ? <MatchGrid matches={matches} /> : null}
+      {!loading && !error && year ? <MatchGrid matches={matches} /> : null}
     </PageContainer>
   );
 }

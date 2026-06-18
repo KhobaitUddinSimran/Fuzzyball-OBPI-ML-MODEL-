@@ -8,7 +8,7 @@ export function TopHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const date = searchParams.get("date");
+  const year = searchParams.get("year");
   const canGoBack = pathname !== "/";
 
   return (
@@ -38,8 +38,8 @@ export function TopHeader() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
-          <Step active={pathname === "/"}>1. Select date</Step>
-          <Step active={pathname === "/matches" && Boolean(date)}>2. Select match</Step>
+          <Step active={pathname === "/"}>1. Select year</Step>
+          <Step active={pathname === "/matches" && Boolean(year)}>2. Select match</Step>
           <Step active={pathname.startsWith("/matches/") && !pathname.includes("/players/")}>3. Select player</Step>
           <Step active={pathname.includes("/players/")}>4. Analyze player</Step>
         </div>

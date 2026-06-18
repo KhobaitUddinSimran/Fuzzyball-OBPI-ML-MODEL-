@@ -277,6 +277,10 @@ export function getMockMatchesByDate(date) {
   return mockMatches.filter((match) => match.date === date).map(toSummary);
 }
 
+export function getMockMatchesByYear(year) {
+  return mockMatches.filter((match) => String(match.date).startsWith(String(year))).map(toSummary);
+}
+
 export function getMockMatch(matchId) {
   const match = mockMatches.find((item) => String(item.match_id) === String(matchId));
   if (!match) return null;
