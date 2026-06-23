@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import logging
+import sys
 import time
 import uuid
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
-from api.routes import analyze, compare, health, leaderboard, players
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_PATH = PROJECT_ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+from api.routes import analyze, compare, health, leaderboard, players, statsbomb
 
 logger = logging.getLogger("obpi.api")
 
@@ -24,7 +31,12 @@ app = FastAPI(
 # ─── CORS ─────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://obpi-dashboard.onrender.com"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "https://obpi-dashboard.onrender.com",
+    ],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -64,6 +76,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # ─── Routers ──────────────────────────────────────────────────────────────
 app.include_router(health.router)
 app.include_router(players.router)
+app.include_router(statsbomb.router)
 app.include_router(analyze.router)
 app.include_router(compare.router)
 app.include_router(leaderboard.router)

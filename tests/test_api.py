@@ -95,3 +95,71 @@ class TestCors:
         )
         assert response.status_code == 200
         assert "access-control-allow-origin" in response.headers
+
+
+class TestStatsBombRoutes:
+    """Tests for dashboard StatsBomb browsing endpoints."""
+
+    def test_world_cup_years(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "api.routes.statsbomb.get_world_cup_years",
+            lambda: [{"year": "2022", "season_id": 106, "label": "2022 FIFA World Cup"}],
+        )
+
+        response = client.get("/events/fifa-world-cup/years")
+
+        assert response.status_code == 200
+        assert response.json()[0]["year"] == "2022"
+
+    def test_matches_by_year(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "api.routes.statsbomb.get_matches_by_year",
+            lambda year: [{"match_id": 3794686, "home_team": "Argentina"}],
+        )
+
+        response = client.get("/matches?event=fifa-world-cup&year=2022")
+
+        assert response.status_code == 200
+        assert response.json()[0]["match_id"] == 3794686
+
+    def test_matches_rejects_unknown_event(self) -> None:
+        response = client.get("/matches?event=euro&year=2022")
+
+        assert response.status_code == 400
+
+    def test_match_detail_404(self, monkeypatch) -> None:
+        monkeypatch.setattr("api.routes.statsbomb.get_match_details", lambda match_id: None)
+
+        response = client.get("/matches/1")
+
+        assert response.status_code == 404
+
+    def test_eligible_players(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "api.routes.statsbomb.get_match_details",
+            lambda match_id: {"match_id": match_id},
+        )
+        monkeypatch.setattr(
+            "api.routes.statsbomb.get_eligible_players",
+            lambda match_id: [{"player_id": 10, "player_name": "Test Player"}],
+        )
+
+        response = client.get("/matches/3794686/eligible-players")
+
+        assert response.status_code == 200
+        assert response.json()[0]["player_id"] == 10
+
+    def test_match_frames(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "api.routes.statsbomb.get_match_details",
+            lambda match_id: {"match_id": match_id},
+        )
+        monkeypatch.setattr(
+            "api.routes.statsbomb.get_match_360_frames",
+            lambda match_id: {"match_id": match_id, "frame_count": 0, "frames": []},
+        )
+
+        response = client.get("/matches/3794686/frames")
+
+        assert response.status_code == 200
+        assert response.json()["frames"] == []
