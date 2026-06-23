@@ -21,6 +21,27 @@ class MetricBreakdown(BaseModel):
     M9_CBI: float = Field(..., ge=0.0, description="Call-for-Ball Index")
 
 
+class MetricValues(BaseModel):
+    """Nullable M1-M9 values for one metric stage."""
+
+    M1_SC: float | None = None
+    M2_OIRC: float | None = None
+    M3_BRPC: float | None = None
+    M4_OBR90: float | None = None
+    M5_RBTL: float | None = None
+    M6_RUP: float | None = None
+    M7_SCI: float | None = None
+    M8_LPC: float | None = None
+    M9_CBI: float | None = None
+
+
+class MetricStatus(BaseModel):
+    """Availability status and reason for one metric."""
+
+    status: str
+    reason: str | None = None
+
+
 class ShapBreakdown(BaseModel):
     """SHAP value breakdown per metric."""
 
@@ -58,6 +79,27 @@ class DimensionScores(BaseModel):
     temporal: float = Field(..., description="Average of M8_LPC and M9_CBI")
 
 
+class DataQuality(BaseModel):
+    """Data availability summary for a player analysis response."""
+
+    has_360: bool = False
+    events_loaded: bool = False
+    frames_loaded: bool = False
+    joined_360_frames: int = 0
+    high_quality_frames: int = 0
+    minutes_available: bool = False
+    unavailable_metrics: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ExplainabilityPayload(BaseModel):
+    """Optional model explainability output kept separate from OBPI scoring."""
+
+    model: str = "unavailable"
+    metric_weights: dict[str, float] = Field(default_factory=dict)
+    shap_values: dict[str, float] = Field(default_factory=dict)
+
+
 # ─── Player ────────────────────────────────────────────────────────────────
 
 
@@ -77,6 +119,12 @@ class PlayerSummary(BaseModel):
 class PlayerProfile(PlayerSummary):
     """Full player profile with metrics, SHAP, and weights."""
 
+    raw_metrics: MetricValues
+    normalized_metrics: MetricValues
+    fuzzy_metrics: MetricValues
+    metric_status: dict[str, MetricStatus] = Field(default_factory=dict)
+    data_quality: DataQuality = Field(default_factory=DataQuality)
+    explainability: ExplainabilityPayload = Field(default_factory=ExplainabilityPayload)
     metrics: MetricBreakdown
     shap: ShapBreakdown
     metric_weights: MetricWeights
@@ -148,7 +196,7 @@ class HealthResponse(BaseModel):
 
     status: str = "ok"
     model_version: str = "1.0.0"
-    schema_version: int = 2
+    schema_version: int = 3
     uptime_seconds: float
     cache_connected: bool
 

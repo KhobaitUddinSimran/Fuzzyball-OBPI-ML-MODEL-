@@ -22,7 +22,7 @@ logger = logging.getLogger("obpi.api.routes.compare")
 def compare_players(request: CompareRequest) -> CompareResponse:
     """Compare two players from the same match."""
     id_a, id_b = request.player_ids
-    cache_key = f"compare:{request.match_id}:{id_a}:{id_b}"
+    cache_key = f"compare:v3:{request.match_id}:{id_a}:{id_b}"
     cached = get_cached(cache_key)
     if cached is not None:
         return CompareResponse(**cached)

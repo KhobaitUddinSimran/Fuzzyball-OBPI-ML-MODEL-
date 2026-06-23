@@ -49,7 +49,14 @@ def normalize_processed_metrics(
         series = pd.to_numeric(metrics_df[raw_name], errors="coerce")
         finite = series[series.notna()]
         if finite.empty:
-            raise ValueError(f"metric column {raw_name} contains no finite values")
+            normalized[normalized_name] = pd.NA
+            summary[normalized_name] = {
+                "source_metric": raw_name,
+                "low": 0.0,
+                "high": 0.0,
+                "fallback": "unavailable metrics use neutral 0.5 for fuzzy scoring",
+            }
+            continue
 
         low = float(finite.quantile(lower_quantile))
         high = float(finite.quantile(upper_quantile))
@@ -92,6 +99,10 @@ def run_real_data_fuzzy_processing(
     """Normalize raw metric outputs, fit the fuzzy engine, and score all rows."""
     normalized_df, normalization_summary = normalize_processed_metrics(metrics_df)
     scoring_input = normalized_df[list(id_columns) + NORMALIZED_METRICS].copy()
+    # Missing metrics are unavailable, not true zeroes. Use neutral 0.5 only as
+    # the fuzzy scorer's internal fallback so missing data does not masquerade
+    # as a low metric or dominate the final OBPI score.
+    scoring_input[NORMALIZED_METRICS] = scoring_input[NORMALIZED_METRICS].fillna(0.5)
     engine = fit_fuzzy_engine(scoring_input, metric_names=NORMALIZED_METRICS)
     scored = score_metrics_dataframe(
         scoring_input,

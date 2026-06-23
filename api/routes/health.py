@@ -20,7 +20,7 @@ def health_check() -> HealthResponse:
     return HealthResponse(
         status="ok",
         model_version="1.0.0",
-        schema_version=2,
+        schema_version=3,
         uptime_seconds=uptime,
         cache_connected=cache is not None,
     )

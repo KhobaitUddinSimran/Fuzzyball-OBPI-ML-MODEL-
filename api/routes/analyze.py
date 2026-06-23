@@ -17,7 +17,7 @@ logger = logging.getLogger("obpi.api.routes.analyze")
 @router.post("/analyze", response_model=PlayerProfile)
 def analyze_player(request: AnalyzeRequest) -> PlayerProfile:
     """Run the full OBPI pipeline for a match/player and return the profile."""
-    cache_key = f"analyze:{request.match_id}:{request.player_id}"
+    cache_key = f"analyze:v3:{request.match_id}:{request.player_id}:{request.tier}"
     cached = get_cached(cache_key)
     if cached is not None:
         return PlayerProfile(**cached)

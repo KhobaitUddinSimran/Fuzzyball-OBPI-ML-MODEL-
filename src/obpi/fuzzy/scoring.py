@@ -45,8 +45,11 @@ def score_metrics_dataframe(
 
     scoring_engine = engine or fit_fuzzy_engine(metrics_df, metric_list)
     scored_df = metrics_df.copy()
-    scored_df[score_column] = [
-        scoring_engine.compute(row)
-        for row in metric_values.to_dict(orient="records")
-    ]
+    rows = metric_values.to_dict(orient="records")
+    metric_score_rows = [scoring_engine.compute_metric_scores(row) for row in rows]
+    for metric_name in metric_list:
+        scored_df[f"{metric_name}_fuzzy"] = [
+            metric_scores[metric_name] for metric_scores in metric_score_rows
+        ]
+    scored_df[score_column] = [scoring_engine.compute(row) for row in rows]
     return scored_df

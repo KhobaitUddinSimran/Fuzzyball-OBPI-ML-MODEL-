@@ -88,6 +88,7 @@ def compute_rup(
     events: pd.DataFrame,
     player_id: int,
     frames: list[dict[str, Any]] | None = None,
+    frames_by_event_id: dict[str, list[dict[str, Any]]] | None = None,
     proximity_threshold: float = 2.5,
 ) -> float:
     """Compute Receipt Under Pressure (M6).
@@ -112,7 +113,7 @@ def compute_rup(
         return 0.0
 
     under_pressure = 0
-    for i, (_, row) in enumerate(receipts.iterrows()):
+    for _, row in receipts.iterrows():
         up = row.get("under_pressure")
         if up is not None:
             if bool(up):
@@ -120,12 +121,12 @@ def compute_rup(
             continue
 
         # Fallback: check 360 frame proximity
-        if frames is not None and i < len(frames):
-            loc = row.get("location")
-            if loc is not None:
-                dist = nearest_opponent_distance(frames[i], loc)
-                if dist <= proximity_threshold:
-                    under_pressure += 1
+        event_frames = _frames_for_event(row, frames_by_event_id)
+        loc = row.get("location")
+        if event_frames and loc is not None:
+            dist = nearest_opponent_distance(event_frames[0], loc)
+            if dist <= proximity_threshold:
+                under_pressure += 1
 
     return under_pressure / len(receipts)
 
@@ -134,6 +135,7 @@ def compute_brpc(
     events: pd.DataFrame,
     frames: list[dict[str, Any]],
     player_id: int,
+    frames_by_event_id: dict[str, list[dict[str, Any]]] | None = None,
     pressure_threshold: float = 5.0,
     cone_angle: float = 45.0,
     cone_length: float = 15.0,
@@ -156,22 +158,24 @@ def compute_brpc(
         BRPC in ``[0.0, 1.0]``. Returns ``0.0`` if no receipts found.
     """
     receipts = get_receipt_events(events, player_id)
-    if receipts.empty or not frames:
+    if receipts.empty:
         return 0.0
 
     count = 0
-    for i, (_, row) in enumerate(receipts.iterrows()):
-        if i >= len(frames):
-            break
+    for _, row in receipts.iterrows():
+        event_frames = _frames_for_event(row, frames_by_event_id)
+        if not event_frames:
+            continue
         loc = row.get("location")
         if loc is None:
             continue
 
-        dist = nearest_opponent_distance(frames[i], loc)
+        frame = event_frames[0]
+        dist = nearest_opponent_distance(frame, loc)
         if dist <= pressure_threshold:
             continue
 
-        ff = frames[i].get("freeze_frame", [])
+        ff = frame.get("freeze_frame", [])
         opponents = [
             p["location"]
             for p in ff
@@ -185,3 +189,16 @@ def compute_brpc(
         count += 1
 
     return count / len(receipts)
+
+
+def _frames_for_event(
+    row: pd.Series,
+    frames_by_event_id: dict[str, list[dict[str, Any]]] | None,
+) -> list[dict[str, Any]]:
+    """Return exact 360 frames matched to the event id."""
+    if not frames_by_event_id:
+        return []
+    event_id = row.get("id")
+    if not event_id:
+        return []
+    return frames_by_event_id.get(str(event_id), [])

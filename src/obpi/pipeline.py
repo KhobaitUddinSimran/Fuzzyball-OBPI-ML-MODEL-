@@ -14,7 +14,7 @@ import pandas as pd
 from obpi.config.loader import Config, load_config
 from obpi.data.loader import StatsBombLoader
 from obpi.metrics.movement import compute_obr90, compute_oirc
-from obpi.metrics.receiving import compute_brpc, compute_rbtl, compute_rup
+from obpi.metrics.receiving import compute_brpc, compute_rbtl, compute_rup, get_receipt_events
 from obpi.metrics.spatial import compute_sc, compute_sci
 from obpi.metrics.temporal import compute_cbi, compute_lpc
 from obpi.utils.logger import setup_logging
@@ -23,11 +23,14 @@ from obpi.utils.xt_model import XTModel
 logger = logging.getLogger("obpi.pipeline")
 
 # Increment when output schema changes to invalidate old caches
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 
-_METRIC_COLUMNS = [
+_IDENTIFIER_COLUMNS = [
     "player_id",
     "match_id",
+]
+
+_RAW_METRIC_COLUMNS = [
     "M1_SC",
     "M2_OIRC",
     "M3_BRPC",
@@ -39,7 +42,24 @@ _METRIC_COLUMNS = [
     "M9_CBI",
 ]
 
-_FUZZY_METRIC_COLUMNS = _METRIC_COLUMNS[2:]
+_STATUS_COLUMNS = [
+    column
+    for metric_name in _RAW_METRIC_COLUMNS
+    for column in (f"{metric_name}_status", f"{metric_name}_reason")
+]
+
+_DATA_QUALITY_COLUMNS = [
+    "has_360",
+    "events_loaded",
+    "frames_loaded",
+    "joined_360_frames",
+    "high_quality_frames",
+    "minutes_available",
+    "data_quality_warnings",
+]
+
+_METRIC_COLUMNS = _IDENTIFIER_COLUMNS + _RAW_METRIC_COLUMNS
+_FUZZY_METRIC_COLUMNS = _RAW_METRIC_COLUMNS
 _NORMALIZED_METRIC_COLUMNS = [f"M{i}" for i in range(1, 10)]
 
 
@@ -58,13 +78,151 @@ def _extract_unique_players(events: pd.DataFrame) -> list[int]:
     return sorted({pid for pid in players if pid is not None})
 
 
+def _get_player_events(events: pd.DataFrame, player_id: int) -> pd.DataFrame:
+    """Return events for one player across flattened or nested StatsBomb schemas."""
+    if events.empty:
+        return events
+    if "player_id" in events.columns:
+        player_ids = pd.to_numeric(events["player_id"], errors="coerce")
+        return events[player_ids == player_id].reset_index(drop=True)
+    if "player" not in events.columns:
+        return events.iloc[0:0].copy()
+    return events[
+        events["player"].apply(
+            lambda p, pid=player_id: (
+                p.get("id") == pid if isinstance(p, dict) else False
+            )
+        )
+    ].reset_index(drop=True)
+
+
+def _has_columns(events: pd.DataFrame, columns: set[str]) -> bool:
+    """Return whether all required columns are present."""
+    return columns.issubset(events.columns)
+
+
+def _is_high_quality_frame(frame: dict[str, Any]) -> bool:
+    """Return whether a 360 frame has enough player locations to be useful."""
+    freeze_frame = frame.get("freeze_frame", [])
+    locations = [
+        player.get("location")
+        for player in freeze_frame
+        if isinstance(player, dict) and player.get("location") is not None
+    ]
+    return len(locations) >= 10
+
+
+def _build_frames_by_event_id(
+    frame_rows: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Group StatsBomb 360 rows by event_uuid/id into freeze-frame payloads."""
+    frames_by_event_id: dict[str, list[dict[str, Any]]] = {}
+    for row in frame_rows:
+        frame_id = row.get("event_uuid") or row.get("id")
+        if not frame_id:
+            continue
+        frame_key = str(frame_id)
+        event_frames = frames_by_event_id.setdefault(
+            frame_key,
+            [
+                {
+                    "event_uuid": frame_key,
+                    "visible_area": row.get("visible_area"),
+                    "freeze_frame": [],
+                }
+            ],
+        )
+        frame_payload = event_frames[0]
+        if not frame_payload.get("visible_area") and row.get("visible_area"):
+            frame_payload["visible_area"] = row.get("visible_area")
+        existing_freeze_frame = row.get("freeze_frame")
+        if isinstance(existing_freeze_frame, list):
+            frame_payload["freeze_frame"].extend(existing_freeze_frame)
+        elif row.get("location") is not None:
+            frame_payload["freeze_frame"].append(
+                {
+                    "location": row.get("location"),
+                    "teammate": bool(row.get("teammate")),
+                    "actor": bool(row.get("actor")),
+                    "keeper": bool(row.get("keeper")),
+                }
+            )
+    return {
+        event_id: frames
+        for event_id, frames in frames_by_event_id.items()
+        if frames and frames[0].get("freeze_frame")
+    }
+
+
+def _event_id(row: pd.Series) -> str | None:
+    """Return an event id from a DataFrame row."""
+    event_id = row.get("id")
+    if not event_id:
+        return None
+    return str(event_id)
+
+
+def _ordered_frames_for_events(
+    events: pd.DataFrame,
+    frames_by_event_id: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Return one matched frame per event, ordered by event order."""
+    ordered: list[dict[str, Any]] = []
+    for _, event in events.iterrows():
+        event_id = _event_id(event)
+        if not event_id:
+            continue
+        event_frames = frames_by_event_id.get(event_id, [])
+        if event_frames:
+            ordered.append(event_frames[0])
+    return ordered
+
+
+def _count_events_with_frames(
+    events: pd.DataFrame,
+    frames_by_event_id: dict[str, list[dict[str, Any]]],
+) -> int:
+    """Count events that have exact matched 360 freeze frames."""
+    count = 0
+    for _, event in events.iterrows():
+        event_id = _event_id(event)
+        if event_id and frames_by_event_id.get(event_id):
+            count += 1
+    return count
+
+
+def _set_metric(
+    row: dict[str, Any],
+    metric_name: str,
+    value: float | None,
+    status: str = "available",
+    reason: str | None = None,
+) -> None:
+    """Set a metric value plus status metadata on a row."""
+    row[metric_name] = None if value is None else float(value)
+    row[f"{metric_name}_status"] = status
+    row[f"{metric_name}_reason"] = reason
+
+
+def _metric_unavailable(row: dict[str, Any], metric_name: str, reason: str) -> None:
+    """Mark one metric as unavailable with a reason."""
+    _set_metric(row, metric_name, None, "unavailable", reason)
+
+
+def _metric_warning(row: dict[str, Any], message: str) -> None:
+    """Append a data-quality warning to a metric row."""
+    row.setdefault("data_quality_warnings", [])
+    if message not in row["data_quality_warnings"]:
+        row["data_quality_warnings"].append(message)
+
+
 def _sci_from_frames(frames: list[dict[str, Any]]) -> float:
     """Compute average SCI across consecutive frame pairs."""
     if len(frames) < 2:
         return 0.0
     values = []
-    for i in range(len(frames) - 1):
-        values.append(compute_sci([frames[i]], [frames[i + 1]]))
+    for before, after in zip(frames, frames[1:]):
+        values.append(compute_sci([before], [after]))
     return float(sum(values) / len(values))
 
 
@@ -75,8 +233,8 @@ def _sc_from_frames(
     if len(frames) < 2:
         return 0.0
     values = []
-    for i in range(len(frames) - 1):
-        values.append(compute_sc([frames[i]], [frames[i + 1]], player_location))
+    for before, after in zip(frames, frames[1:]):
+        values.append(compute_sc([before], [after], player_location))
     return float(sum(values) / len(values))
 
 
@@ -100,7 +258,7 @@ def _cached_sc(
     return _match_cache[key]
 
 
-def compute_all_metrics(
+def _compute_all_metrics_legacy(
     match_id: int,
     tier: str = "open",
     xt_model: XTModel | None = None,
@@ -234,6 +392,230 @@ def compute_all_metrics(
         rows.append(row)
 
     return pd.DataFrame(rows, columns=_METRIC_COLUMNS)
+
+
+def compute_all_metrics(
+    match_id: int,
+    tier: str = "open",
+    xt_model: XTModel | None = None,
+    config: Config | None = None,
+) -> pd.DataFrame:
+    """Run OBPI metric extraction with explicit metric availability metadata."""
+    cfg = config or load_config()
+    loader = StatsBombLoader(tier=tier)
+    events = loader.get_events(match_id)
+    frame_rows = loader.get_freeze_frames(match_id)
+    frames_by_event_id = _build_frames_by_event_id(frame_rows)
+    frames = _ordered_frames_for_events(events, frames_by_event_id)
+
+    logger.info(
+        "match=%s events=%d frame_rows=%d matched_frames=%d players=%d",
+        match_id,
+        len(events),
+        len(frame_rows),
+        len(frames),
+        len(_extract_unique_players(events)),
+    )
+
+    if xt_model is None:
+        xt_model = XTModel()
+
+    players = _extract_unique_players(events)
+    cached_sci: float | None = _cached_sci(match_id, frames) if frames else None
+
+    rows: list[dict[str, Any]] = []
+    for player_id in players:
+        player_events = _get_player_events(events, player_id)
+        receipts = get_receipt_events(events, player_id)
+        receipt_frame_count = _count_events_with_frames(receipts, frames_by_event_id)
+        player_frame_count = _count_events_with_frames(player_events, frames_by_event_id)
+        high_quality_frames = sum(1 for frame in frames if _is_high_quality_frame(frame))
+        minutes_available = (
+            not player_events.empty
+            and "minute" in player_events.columns
+            and player_events["minute"].notna().any()
+        )
+        row: dict[str, Any] = {
+            "player_id": player_id,
+            "match_id": match_id,
+            "has_360": bool(frames),
+            "events_loaded": not events.empty,
+            "frames_loaded": bool(frames),
+            "joined_360_frames": player_frame_count,
+            "high_quality_frames": high_quality_frames,
+            "minutes_available": bool(minutes_available),
+            "data_quality_warnings": [],
+        }
+
+        if not _has_columns(events, {"timestamp", "location"}):
+            reason = "Events are missing timestamp or location columns"
+            _metric_unavailable(row, "M4_OBR90", reason)
+            _metric_unavailable(row, "M2_OIRC", reason)
+        else:
+            if not minutes_available:
+                _metric_warning(
+                    row,
+                    "Minutes played is missing, so M4_OBR90 may be unreliable.",
+                )
+            _set_metric(
+                row,
+                "M4_OBR90",
+                compute_obr90(
+                    events,
+                    player_id,
+                    v_threshold=cfg.movement.v_threshold,
+                    duration_threshold=cfg.movement.duration_threshold,
+                    max_dt=cfg.movement.max_dt,
+                ),
+                "available_with_warning" if not minutes_available else "available",
+                None if minutes_available else "Minutes played was estimated from events",
+            )
+            _set_metric(row, "M2_OIRC", compute_oirc(events, player_id))
+
+        _set_metric(row, "M5_RBTL", compute_rbtl(events, player_id))
+        has_pressure_flag = (
+            "under_pressure" in receipts.columns
+            and receipts["under_pressure"].notna().any()
+        )
+        if receipts.empty:
+            _set_metric(row, "M6_RUP", 0.0, "available", "No receipt opportunities")
+            _set_metric(row, "M3_BRPC", 0.0, "available", "No receipt opportunities")
+        else:
+            if has_pressure_flag or receipt_frame_count > 0:
+                _set_metric(
+                    row,
+                    "M6_RUP",
+                    compute_rup(
+                        events,
+                        player_id,
+                        frames if frames else None,
+                        frames_by_event_id=frames_by_event_id,
+                        proximity_threshold=cfg.receiving.proximity_threshold,
+                    ),
+                    "available",
+                    "Used event pressure flags" if has_pressure_flag else None,
+                )
+            else:
+                _metric_unavailable(
+                    row,
+                    "M6_RUP",
+                    "No pressure flags or 360 frames for receipt pressure calculation",
+                )
+
+            if not frames:
+                _metric_unavailable(
+                    row,
+                    "M3_BRPC",
+                    "No 360 frames for best receiving position calculation",
+                )
+            elif receipt_frame_count == 0:
+                _metric_unavailable(
+                    row,
+                    "M3_BRPC",
+                    "No valid joined 360 frames for this player",
+                )
+            else:
+                partial_join = receipt_frame_count < len(receipts)
+                if partial_join:
+                    _metric_warning(row, "Some receipt events have no joined 360 frame.")
+                _set_metric(
+                    row,
+                    "M3_BRPC",
+                    compute_brpc(
+                        events,
+                        frames,
+                        player_id,
+                        frames_by_event_id=frames_by_event_id,
+                        pressure_threshold=cfg.receiving.pressure_radius,
+                        cone_angle=cfg.receiving.cone_angle,
+                        cone_length=cfg.receiving.cone_length,
+                    ),
+                    "available_with_warning" if partial_join else "available",
+                    "Only partial receipt-frame joins were available" if partial_join else None,
+                )
+
+        if not _has_columns(events, {"timestamp", "period", "location"}):
+            _metric_unavailable(
+                row,
+                "M8_LPC",
+                "Events are missing timestamp, period, or location columns",
+            )
+        else:
+            _set_metric(
+                row,
+                "M8_LPC",
+                compute_lpc(
+                    events,
+                    player_id,
+                    xt_model,
+                    min_dt=cfg.temporal.min_dt,
+                    max_vel=cfg.temporal.max_vel,
+                ),
+            )
+
+        if receipts.empty:
+            _set_metric(row, "M9_CBI", 0.0, "available", "No receipt opportunities")
+        elif not frames:
+            _metric_unavailable(row, "M9_CBI", "No 360 frames for CBI calculation")
+        elif receipt_frame_count == 0:
+            _metric_unavailable(
+                row,
+                "M9_CBI",
+                "No valid joined 360 frames for this player",
+            )
+        else:
+            partial_join = receipt_frame_count < len(receipts)
+            _set_metric(
+                row,
+                "M9_CBI",
+                compute_cbi(
+                    events,
+                    frames,
+                    player_id,
+                    frames_by_event_id=frames_by_event_id,
+                    angle_threshold=cfg.temporal.angle_threshold,
+                    lane_buffer=cfg.temporal.lane_buffer,
+                ),
+                "available_with_warning" if partial_join else "available",
+                "Only partial receipt-frame joins were available" if partial_join else None,
+            )
+
+        if not frames:
+            _metric_unavailable(row, "M7_SCI", "No 360 frames for spatial calculation")
+            _metric_unavailable(row, "M1_SC", "No 360 frames for spatial calculation")
+        elif high_quality_frames < 2 or cached_sci is None:
+            reason = "No valid joined 360 frames for spatial calculation"
+            _metric_unavailable(row, "M7_SCI", reason)
+            _metric_unavailable(row, "M1_SC", reason)
+        else:
+            _set_metric(row, "M7_SCI", cached_sci)
+            locs = (
+                player_events["location"].dropna()
+                if "location" in player_events.columns
+                else pd.Series(dtype=object)
+            )
+            if locs.empty:
+                _metric_unavailable(
+                    row,
+                    "M1_SC",
+                    "No valid player locations for screening calculation",
+                )
+            else:
+                avg_loc = [
+                    float(locs.apply(lambda loc: loc[0]).mean()),
+                    float(locs.apply(lambda loc: loc[1]).mean()),
+                ]
+                _set_metric(row, "M1_SC", _cached_sc(match_id, frames, avg_loc))
+
+        if any(row.get(f"{metric}_status") == "unavailable" for metric in _RAW_METRIC_COLUMNS):
+            _metric_warning(row, "Some frame-dependent metrics were unavailable.")
+
+        rows.append(row)
+
+    return pd.DataFrame(
+        rows,
+        columns=_METRIC_COLUMNS + _STATUS_COLUMNS + _DATA_QUALITY_COLUMNS,
+    )
 
 
 def run_pipeline(

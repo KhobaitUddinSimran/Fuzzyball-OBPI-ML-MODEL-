@@ -32,21 +32,28 @@ class FuzzyEngine:
 
     def compute(self, metrics: Mapping[str, float]) -> float:
         """Compute one corrected OBPI score from crisp metric inputs."""
+        metric_scores = self.compute_metric_scores(metrics)
+        weighted_outputs = []
+        weights = []
+        for metric_name in self.metric_names:
+            weighted_outputs.append(metric_scores[metric_name] * self.metric_weights[metric_name])
+            weights.append(self.metric_weights[metric_name])
+
+        raw_obpi = float(np.sum(weighted_outputs) / np.sum(weights))
+        return self.correct_range(raw_obpi)
+
+    def compute_metric_scores(self, metrics: Mapping[str, float]) -> dict[str, float]:
+        """Return fuzzy-adjusted per-metric scores before final aggregation."""
         missing = set(self.metric_names) - set(metrics)
         if missing:
             missing_text = ", ".join(sorted(missing))
             raise ValueError(f"missing metric values: {missing_text}")
 
-        weighted_outputs = []
-        weights = []
+        scores: dict[str, float] = {}
         for metric_name in self.metric_names:
             crisp_value = float(np.clip(metrics[metric_name], 0.0, 1.0))
-            raw_score = self._score_metric(metric_name, crisp_value)
-            weighted_outputs.append(raw_score * self.metric_weights[metric_name])
-            weights.append(self.metric_weights[metric_name])
-
-        raw_obpi = float(np.sum(weighted_outputs) / np.sum(weights))
-        return self.correct_range(raw_obpi)
+            scores[metric_name] = self._score_metric(metric_name, crisp_value)
+        return scores
 
     def compute_many(self, rows: Sequence[Mapping[str, float]]) -> np.ndarray:
         """Compute corrected OBPI scores for multiple metric dictionaries."""

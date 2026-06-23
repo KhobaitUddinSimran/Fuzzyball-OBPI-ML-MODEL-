@@ -21,7 +21,7 @@ def get_leaderboard(
     archetype: str | None = Query(default=None, description="Filter by archetype label"),
 ) -> LeaderboardResponse:
     """Return a ranked leaderboard of all players in the match."""
-    cache_key = f"leaderboard:{match_id}"
+    cache_key = f"leaderboard:v3:{match_id}"
     cached = get_cached(cache_key)
     if cached is not None:
         response = LeaderboardResponse(**cached)

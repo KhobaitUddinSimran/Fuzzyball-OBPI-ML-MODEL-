@@ -15,11 +15,16 @@ export function OBPIScoreCard({ analysis }) {
             <ScoreBandBadge score={analysis.obpi_score} />
             <OBPIStyleBadge style={style} />
           </div>
+          <p className="mt-3 text-sm text-muted">
+            Scores are normalized relative to players in this match.
+          </p>
         </div>
         <div className="rounded-md border border-slate-700 bg-slate-950 px-5 py-4">
           <div className="text-xs uppercase tracking-wide text-muted">Percentile</div>
           <div className="mt-1 text-2xl font-semibold text-white">
-            {analysis.percentile ? formatPercentile(analysis.percentile) : "N/A"}
+            {analysis.percentile === null || analysis.percentile === undefined
+              ? "N/A"
+              : formatPercentile(analysis.percentile)}
           </div>
         </div>
       </div>

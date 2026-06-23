@@ -131,6 +131,7 @@ def compute_cbi(
     events: pd.DataFrame,
     frames: list[dict[str, Any]],
     player_id: int,
+    frames_by_event_id: dict[str, list[dict[str, Any]]] | None = None,
     angle_threshold: float = 30.0,
     lane_buffer: float = 1.5,
 ) -> float:
@@ -151,7 +152,7 @@ def compute_cbi(
     Returns:
         CBI value in ``[0.0, 1.0]``. Returns ``0.0`` if no opportunities.
     """
-    if events.empty or not frames:
+    if events.empty:
         return 0.0
 
     df = events.copy()
@@ -173,10 +174,11 @@ def compute_cbi(
     ]["location"]
     row_positions = {index: position for position, index in enumerate(df.index)}
 
-    for i, (_, row) in enumerate(receipts.iterrows()):
+    for _, row in receipts.iterrows():
         opportunities += 1
         loc = row.get("location")
-        if loc is None or i >= len(frames):
+        event_frames = _frames_for_event(row, frames_by_event_id)
+        if loc is None or not event_frames:
             continue
 
         # Ball-to-player vector: from previous event location (pass origin) to receipt
@@ -215,7 +217,7 @@ def compute_cbi(
             continue
 
         # Lane check: no opponent within buffer of the line from ball to player
-        frame = frames[i]
+        frame = event_frames[0]
         ff = frame.get("freeze_frame", [])
         opponents = [
             p["location"]
@@ -229,6 +231,19 @@ def compute_cbi(
         count += 1
 
     return count / opportunities if opportunities > 0 else 0.0
+
+
+def _frames_for_event(
+    row: pd.Series,
+    frames_by_event_id: dict[str, list[dict[str, Any]]] | None,
+) -> list[dict[str, Any]]:
+    """Return exact 360 frames matched to the event id."""
+    if not frames_by_event_id:
+        return []
+    event_id = row.get("id")
+    if not event_id:
+        return []
+    return frames_by_event_id.get(str(event_id), [])
 
 
 def _passing_lane_open(

@@ -23,7 +23,7 @@ def list_players(
     match_id: int = Query(..., description="StatsBomb match identifier"),
 ) -> PlayersResponse:
     """Return all players with OBPI summaries for a given match."""
-    cache_key = f"players:{match_id}"
+    cache_key = f"players:v3:{match_id}"
     cached = get_cached(cache_key)
     if cached is not None:
         return PlayersResponse(**cached)
@@ -53,7 +53,7 @@ def get_player(
     match_id: int = Query(..., description="StatsBomb match identifier"),
 ) -> PlayerProfile:
     """Return full player profile for a given match and player."""
-    cache_key = f"player:{match_id}:{player_id}"
+    cache_key = f"player:v3:{match_id}:{player_id}"
     cached = get_cached(cache_key)
     if cached is not None:
         return PlayerProfile(**cached)

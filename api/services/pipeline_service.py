@@ -8,8 +8,12 @@ from typing import Any
 import pandas as pd
 
 from api.models import (
+    DataQuality,
     DimensionScores,
+    ExplainabilityPayload,
     MetricBreakdown,
+    MetricStatus,
+    MetricValues,
     MetricWeights,
     PlayerProfile,
     PlayerSummary,
@@ -33,6 +37,30 @@ _ARCHETYPE_THRESHOLDS = [
     (0.20, "raw_runner"),
     (0.00, "low_impact"),
 ]
+
+_METRIC_NAMES = [
+    "M1_SC",
+    "M2_OIRC",
+    "M3_BRPC",
+    "M4_OBR90",
+    "M5_RBTL",
+    "M6_RUP",
+    "M7_SCI",
+    "M8_LPC",
+    "M9_CBI",
+]
+
+_NORMALIZED_TO_RAW = {
+    "M1": "M1_SC",
+    "M2": "M2_OIRC",
+    "M3": "M3_BRPC",
+    "M4": "M4_OBR90",
+    "M5": "M5_RBTL",
+    "M6": "M6_RUP",
+    "M7": "M7_SCI",
+    "M8": "M8_LPC",
+    "M9": "M9_CBI",
+}
 
 
 def _assign_archetype(obpi_score: float) -> str:
@@ -71,6 +99,108 @@ def _build_metric_breakdown(row: pd.Series) -> MetricBreakdown:
         M8_LPC=float(row["M8_LPC"]),
         M9_CBI=float(row["M9_CBI"]),
     )
+
+
+def _clean_number(value: Any) -> float | None:
+    """Return finite floats and convert missing/NaN values to None."""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except TypeError:
+        pass
+    return float(value)
+
+
+def _build_metric_values(values: dict[str, Any]) -> MetricValues:
+    """Build nullable metric values from a raw dict."""
+    return MetricValues(**{metric: _clean_number(values.get(metric)) for metric in _METRIC_NAMES})
+
+
+def _build_legacy_metric_breakdown(values: dict[str, float | None]) -> MetricBreakdown:
+    """Build the legacy non-null metrics object from staged metric values."""
+    return MetricBreakdown(
+        **{metric: float(values.get(metric) or 0.0) for metric in _METRIC_NAMES}
+    )
+
+
+def _metric_average(values: dict[str, float | None], metric_names: list[str]) -> float:
+    """Average available values; return 0.0 when all values are unavailable."""
+    available = [values[name] for name in metric_names if values.get(name) is not None]
+    if not available:
+        return 0.0
+    return float(sum(available) / len(available))
+
+
+def _compute_dimensions_from_values(values: dict[str, float | None]) -> DimensionScores:
+    """Aggregate normalized/fuzzy M1-M9 into 4 dimension scores."""
+    return DimensionScores(
+        spatial=_metric_average(values, ["M1_SC", "M7_SCI"]),
+        movement=_metric_average(values, ["M2_OIRC", "M4_OBR90"]),
+        receiving=_metric_average(values, ["M3_BRPC", "M5_RBTL", "M6_RUP"]),
+        temporal=_metric_average(values, ["M8_LPC", "M9_CBI"]),
+    )
+
+
+def _build_metric_statuses(row: pd.Series) -> dict[str, MetricStatus]:
+    """Build per-metric status metadata."""
+    statuses: dict[str, MetricStatus] = {}
+    for metric in _METRIC_NAMES:
+        reason = row.get(f"{metric}_reason")
+        if not isinstance(reason, str):
+            reason = None if _clean_number(reason) is None else str(reason)
+        if reason == "":
+            reason = None
+        statuses[metric] = MetricStatus(
+            status=str(row.get(f"{metric}_status") or "available"),
+            reason=reason or None,
+        )
+    return statuses
+
+
+def _build_data_quality(row: pd.Series) -> DataQuality:
+    """Build response-level data quality metadata from a metrics row."""
+    unavailable = [
+        metric
+        for metric in _METRIC_NAMES
+        if row.get(f"{metric}_status") == "unavailable"
+    ]
+    warnings = row.get("data_quality_warnings")
+    if not isinstance(warnings, list):
+        warnings = []
+    return DataQuality(
+        has_360=bool(row.get("has_360", False)),
+        events_loaded=bool(row.get("events_loaded", False)),
+        frames_loaded=bool(row.get("frames_loaded", False)),
+        joined_360_frames=int(row.get("joined_360_frames") or 0),
+        high_quality_frames=int(row.get("high_quality_frames") or 0),
+        minutes_available=bool(row.get("minutes_available", False)),
+        unavailable_metrics=unavailable,
+        warnings=warnings,
+    )
+
+
+def _build_normalized_values(
+    raw_row: pd.Series,
+    fuzzy_row: pd.Series,
+) -> dict[str, float | None]:
+    """Return normalized metrics, preserving null for unavailable raw metrics."""
+    values: dict[str, float | None] = {}
+    for normalized_name, raw_name in _NORMALIZED_TO_RAW.items():
+        if raw_row.get(f"{raw_name}_status") == "unavailable":
+            values[raw_name] = None
+        else:
+            values[raw_name] = _clean_number(fuzzy_row.get(normalized_name))
+    return values
+
+
+def _build_fuzzy_values(fuzzy_row: pd.Series) -> dict[str, float | None]:
+    """Return per-metric fuzzy-adjusted values used for final OBPI scoring."""
+    values: dict[str, float | None] = {}
+    for normalized_name, raw_name in _NORMALIZED_TO_RAW.items():
+        values[raw_name] = _clean_number(fuzzy_row.get(f"{normalized_name}_fuzzy"))
+    return values
 
 
 def _build_shap_breakdown(shap_row: dict[str, float] | None) -> ShapBreakdown:
@@ -160,7 +290,7 @@ def _resolve_minutes(events_df: pd.DataFrame, player_id: int) -> float:
 
 def _load_or_compute_metrics(match_id: int, tier: str = "open") -> pd.DataFrame:
     """Load metrics from cache or run the pipeline."""
-    cache_key = f"metrics_df:{match_id}:{tier}"
+    cache_key = f"metrics_df:v3:{match_id}:{tier}"
     cached = get_cached(cache_key)
     if cached is not None:
         logger.info("Cache hit for match %s metrics", match_id)
@@ -181,7 +311,7 @@ def _load_or_compute_fuzzy(
     match_id: int, metrics_df: pd.DataFrame, tier: str = "open"
 ) -> pd.DataFrame:
     """Load fuzzy scores from cache or run the fuzzy pipeline."""
-    cache_key = f"fuzzy_df:{match_id}:{tier}"
+    cache_key = f"fuzzy_df:v3:{match_id}:{tier}"
     cached = get_cached(cache_key)
     if cached is not None:
         logger.info("Cache hit for match %s fuzzy scores", match_id)
@@ -234,7 +364,7 @@ def get_all_player_summaries(match_id: int, tier: str = "open") -> list[PlayerSu
                 obpi_score=obpi,
                 percentile=round(float(percentiles[idx]), 2),
                 archetype=_assign_archetype(obpi),
-                dimensions=_compute_dimensions(metrics_row),
+                dimensions=_compute_dimensions_from_values(_build_fuzzy_values(row)),
             )
         )
 
@@ -271,6 +401,12 @@ def get_player_profile(
     )
 
     metrics_row = player_metrics.iloc[0]
+    fuzzy_row = player_fuzzy.iloc[0]
+    raw_metric_values = {
+        metric: _clean_number(metrics_row.get(metric)) for metric in _METRIC_NAMES
+    }
+    normalized_metric_values = _build_normalized_values(metrics_row, fuzzy_row)
+    fuzzy_metric_values = _build_fuzzy_values(fuzzy_row)
 
     # Try to get SHAP values
     shap_row = _get_cached_shap(match_id, player_id)
@@ -282,6 +418,8 @@ def get_player_profile(
     weights = _get_cached_weights(match_id)
     if weights is None:
         weights = _compute_and_cache_weights(match_id, metrics_df, fuzzy_df)
+    shap_values = shap_row if isinstance(shap_row, dict) else {}
+    explainability_model = _get_cached_explainability_model(match_id)
 
     return PlayerProfile(
         player_id=player_id,
@@ -291,8 +429,18 @@ def get_player_profile(
         obpi_score=obpi,
         percentile=percentile,
         archetype=_assign_archetype(obpi),
-        dimensions=_compute_dimensions(metrics_row),
-        metrics=_build_metric_breakdown(metrics_row),
+        dimensions=_compute_dimensions_from_values(fuzzy_metric_values),
+        raw_metrics=_build_metric_values(raw_metric_values),
+        normalized_metrics=_build_metric_values(normalized_metric_values),
+        fuzzy_metrics=_build_metric_values(fuzzy_metric_values),
+        metric_status=_build_metric_statuses(metrics_row),
+        data_quality=_build_data_quality(metrics_row),
+        explainability=ExplainabilityPayload(
+            model=explainability_model,
+            metric_weights=weights or {},
+            shap_values=shap_values,
+        ),
+        metrics=_build_legacy_metric_breakdown(fuzzy_metric_values),
         shap=_build_shap_breakdown(shap_row if isinstance(shap_row, dict) else None),
         metric_weights=_build_metric_weights(weights),
     )
@@ -307,7 +455,7 @@ def _compute_and_cache_shap(
         result = run_match_explainability(metrics_df, fuzzy_df)
     except Exception as exc:
         logger.warning("SHAP computation failed for match %s: %s", match_id, exc)
-        _match_explainability[match_id] = {"shap": {}, "weights": {}}
+        _match_explainability[match_id] = {"shap": {}, "weights": {}, "model": "unavailable"}
         return {}
 
     shap_map: dict[int, dict[str, float]] = {}
@@ -318,6 +466,7 @@ def _compute_and_cache_shap(
     _match_explainability[match_id] = {
         "shap": shap_map,
         "weights": result.metric_weights,
+        "model": result.model_name,
     }
     return shap_map
 
@@ -339,11 +488,12 @@ def _compute_and_cache_weights(
         result = run_match_explainability(metrics_df, fuzzy_df)
     except Exception as exc:
         logger.warning("Weights computation failed for match %s: %s", match_id, exc)
-        _match_explainability[match_id] = {"shap": {}, "weights": {}}
+        _match_explainability[match_id] = {"shap": {}, "weights": {}, "model": "unavailable"}
         return {}
     _match_explainability[match_id] = {
         "shap": result.shap_values.to_dict() if result.shap_values is not None else {},
         "weights": result.metric_weights,
+        "model": result.model_name,
     }
     return result.metric_weights
 
@@ -354,6 +504,14 @@ def _get_cached_weights(match_id: int) -> dict[str, float] | None:
     if data is None:
         return None
     return data.get("weights")
+
+
+def _get_cached_explainability_model(match_id: int) -> str:
+    """Retrieve the cached explainability model name."""
+    data = _match_explainability.get(match_id)
+    if data is None:
+        return "unavailable"
+    return str(data.get("model") or "unavailable")
 
 
 def generate_insight(a: PlayerProfile, b: PlayerProfile) -> str:
